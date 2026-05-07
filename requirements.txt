@@ -1,3 +1,5 @@
 streamlit
 fpdf2
 pandas
+google-generativeai
+Pillow
