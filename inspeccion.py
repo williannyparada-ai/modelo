@@ -2,88 +2,60 @@ import streamlit as st
 from fpdf import FPDF
 from datetime import datetime
 import pandas as pd
+import google.generativeai as genai
+from PIL import Image
+
+# --- LÓGICA DE IA PARA ESCANEO ---
+def leer_ticket_con_ia(imagen_pil, api_key):
+    try:
+        genai.configure(api_key=api_key)
+        # Usamos el modelo más actualizado para evitar el error NotFound
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        prompt = """
+        Eres un experto en control de calidad de cereales. Analiza esta imagen de un ticket de laboratorio:
+        1. Busca los valores de Humedad e Impurezas.
+        2. Responde estrictamente en este formato:
+           Humedad: valor
+           Impurezas: valor
+        Si no los ves, pon 0.0.
+        """
+        response = model.generate_content([prompt, imagen_pil])
+        return response.text
+    except Exception as e:
+        return f"Error: {str(e)}"
 
 # --- LÓGICA DEL PDF CONSOLIDADO ---
 def generar_reporte_consolidado(df_datos, info_cabecera):
-    # Usamos orientación 'L' (Landscape/Horizontal) para que quepan todos los datos en el detalle
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
-    
-    # Encabezado Corporativo
     pdf.set_font("helvetica", 'B', 16)
     pdf.cell(0, 10, "REGISTRO INSPECCIÓN CENTROS EXTERNOS PROVENCESA", align='C', new_x="LMARGIN", new_y="NEXT")
     pdf.ln(5)
-    
-    # Datos Generales
     pdf.set_font("helvetica", size=10)
     pdf.cell(90, 8, f"Fecha: {info_cabecera['fecha']}", border=1)
     pdf.cell(90, 8, f"Centro: {info_cabecera['centro']}", border=1)
     pdf.cell(97, 8, f"Analista: {info_cabecera['analista']}", border=1, new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(5)
-
-    # --- SECCIÓN 1: RESUMEN Y PROMEDIOS (SOLO APROBADOS) ---
-    col_izq, col_der = st.columns(2)
-    
-    pdf.set_font("helvetica", 'B', 12)
-    pdf.cell(0, 8, "ESTADÍSTICAS Y PROMEDIOS (SOLO VEHÍCULOS APROBADOS)", border="B", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(2)
-    
-    df_aprobados = df_datos[df_datos['Estado'] == 'APROBADO']
-    total_v = len(df_datos)
-    total_aprob = len(df_aprobados)
-    total_rech = total_v - total_aprob
-
-    pdf.set_font("helvetica", size=10)
-    pdf.cell(92, 8, f"Total Analizados: {total_v}  |  Aprobados: {total_aprob}  |  Rechazados: {total_rech}", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(2)
-
-    # Tabla de Promedios de Aprobados
-    cols_tecnicas = ['Humedad', 'Impurezas', 'Dañados', 'Partidos', 'Aflatoxinas']
-    if not df_aprobados.empty:
-        promedios = df_aprobados[cols_tecnicas].mean()
-        pdf.set_fill_color(240, 240, 240)
-        pdf.set_font("helvetica", 'B', 9)
-        for col in cols_tecnicas:
-            pdf.cell(55, 7, f"Prom. {col}", border=1, align='C', fill=True)
-        pdf.ln()
-        pdf.set_font("helvetica", size=10)
-        for col in cols_tecnicas:
-            pdf.cell(55, 7, f"{promedios[col]:.2f}", border=1, align='C')
-    else:
-        pdf.cell(0, 8, "No hay vehículos aprobados para promediar.", new_x="LMARGIN", new_y="NEXT")
-    
     pdf.ln(10)
-
-    # --- SECCIÓN 2: DETALLE COMPLETO DE VEHÍCULOS ---
-    pdf.set_font("helvetica", 'B', 12)
-    pdf.cell(0, 8, "DETALLE COMPLETO DE LA JORNADA (TODOS LOS VEHÍCULOS)", border="B", new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("helvetica", 'B', 8)
     
-    # Encabezados de la gran tabla
-    pdf.cell(20, 7, "Lote", border=1, align='C')
-    pdf.cell(40, 7, "Tipo", border=1, align='C')
-    pdf.cell(20, 7, "Hum %", border=1, align='C')
-    pdf.cell(20, 7, "Imp %", border=1, align='C')
-    pdf.cell(20, 7, "Dañ %", border=1, align='C')
-    pdf.cell(20, 7, "Part %", border=1, align='C')
-    pdf.cell(20, 7, "Aflat.", border=1, align='C')
-    pdf.cell(25, 7, "Estado", border=1, align='C')
-    pdf.cell(92, 7, "Motivo / Observaciones", border=1, align='C', new_x="LMARGIN", new_y="NEXT")
+    # Encabezados de tabla
+    pdf.set_font("helvetica", 'B', 9)
+    pdf.cell(30, 7, "Lote", border=1)
+    pdf.cell(50, 7, "Tipo", border=1)
+    pdf.cell(25, 7, "Hum %", border=1)
+    pdf.cell(25, 7, "Imp %", border=1)
+    pdf.cell(30, 7, "Estado", border=1)
+    pdf.cell(100, 7, "Observaciones", border=1, new_x="LMARGIN", new_y="NEXT")
     
-    pdf.set_font("helvetica", size=8)
+    pdf.set_font("helvetica", size=9)
     for _, fila in df_datos.iterrows():
-        pdf.cell(20, 7, str(int(fila['Lote'])), border=1, align='C')
-        pdf.cell(40, 7, str(fila['Tipo']), border=1)
-        pdf.cell(20, 7, f"{fila['Humedad']:.2f}", border=1, align='C')
-        pdf.cell(20, 7, f"{fila['Impurezas']:.2f}", border=1, align='C')
-        pdf.cell(20, 7, f"{fila['Dañados']:.2f}", border=1, align='C')
-        pdf.cell(20, 7, f"{fila['Partidos']:.2f}", border=1, align='C')
-        pdf.cell(20, 7, f"{fila['Aflatoxinas']:.1f}", border=1, align='C')
-        
-        # Color según estado
-        pdf.cell(25, 7, fila['Estado'], border=1, align='C')
-        pdf.cell(92, 7, str(fila['Motivo']), border=1, new_x="LMARGIN", new_y="NEXT")
-
+        pdf.cell(30, 7, str(fila['Lote']), border=1)
+        pdf.cell(50, 7, str(fila['Tipo']), border=1)
+        pdf.cell(25, 7, f"{fila['Humedad']}", border=1)
+        pdf.cell(25, 7, f"{fila['Impurezas']}", border=1)
+        pdf.cell(30, 7, fila['Estado'], border=1)
+        pdf.cell(100, 7, str(fila['Motivo']), border=1, new_x="LMARGIN", new_y="NEXT")
+    
     return pdf.output()
 
 # --- INTERFAZ STREAMLIT ---
@@ -92,71 +64,64 @@ st.set_page_config(page_title="RICP Provencesa", layout="wide")
 if 'lista_inspecciones' not in st.session_state:
     st.session_state.lista_inspecciones = []
 
-st.title("🌾 Registro Inspección Centros Externos Provencesa")
+st.title("🌾 RICP Provencesa - Escáner Inteligente")
 
-with st.expander("📝 Configuración de Cabecera", expanded=False):
-    col_c1, col_c2, col_c3 = st.columns(3)
-    fecha_hoy = col_c1.date_input("Fecha de Análisis", datetime.now())
-    centro_trabajo = col_c2.text_input("Centro / Ubicación", "Planta Araure")
-    analista_calidad = col_c3.selectbox("Analista", ["Willianny", "Yusmary", "Osmar"])
+# BARRA LATERAL PARA IA
+with st.sidebar:
+    st.header("📸 Escanear Ticket")
+    api_key = st.text_input("Configurar Google API Key", type="password")
+    archivo_img = st.file_uploader("Subir foto de Alimentos Polar", type=['jpg', 'png', 'jpeg'])
+    
+    datos_ia = {"h": 0.0, "imp": 0.0}
+    if archivo_img and api_key:
+        img = Image.open(archivo_img)
+        st.image(img, caption="Ticket cargado", use_container_width=True)
+        if st.button("🚀 Extraer Datos con IA"):
+            with st.spinner("Leyendo ticket..."):
+                resultado = leer_ticket_con_ia(img, api_key)
+                st.info(resultado)
+                # Intento simple de extraer números
+                try:
+                    for linea in resultado.split('\n'):
+                        if "Humedad" in linea: datos_ia["h"] = float(linea.split(":")[1].strip())
+                        if "Impurezas" in linea: datos_ia["imp"] = float(linea.split(":")[1].strip())
+                except:
+                    st.warning("No se pudo autocompletar todo, revisa manualmente.")
 
-st.divider()
+# FORMULARIO PRINCIPAL
+with st.expander("📝 Configuración de Cabecera"):
+    c1, c2, c3 = st.columns(3)
+    fecha_hoy = c1.date_input("Fecha", datetime.now())
+    centro_t = c2.text_input("Centro", "Planta Araure")
+    analista = c3.selectbox("Analista", ["Willianny", "Yusmary", "Osmar"])
 
-# --- FORMULARIO ---
 st.header("🚚 Ingreso de Análisis")
-with st.form("registro_vehiculo", clear_on_submit=True):
-    d1, d2 = st.columns(2)
-    lote_v = d1.number_input("Número de Lote / Pedido", step=1, value=0)
-    tipo_v = d2.selectbox("Tipo de Materia Prima", ["Maiz Blanco Nac.", "Maiz Amar. Nac.", "Maiz Blanco Imp.", "Maiz Amar. Imp."])
+with st.form("registro", clear_on_submit=True):
+    col1, col2 = st.columns(2)
+    lote = col1.number_input("Lote", step=1, value=0)
+    materia = col2.selectbox("Materia Prima", ["Maiz Blanco Nac.", "Maiz Amar. Nac."])
     
-    st.write("**Resultados de Laboratorio**")
-    f1, f2, f3, f4, f5 = st.columns(5)
-    h = f1.number_input("Humedad (%)", value=0.0, format="%.2f")
-    imp = f2.number_input("Impurezas (%)", value=0.0, format="%.2f")
-    dan = f3.number_input("Dañados (%)", value=0.0, format="%.2f")
-    par = f4.number_input("Partidos (%)", value=0.0, format="%.2f")
-    afla = f5.number_input("Aflatoxinas (ppb)", value=0.0, format="%.2f")
+    f1, f2 = st.columns(2)
+    h_val = f1.number_input("Humedad %", value=datos_ia["h"])
+    i_val = f2.number_input("Impurezas %", value=datos_ia["imp"])
     
-    st.write("---")
-    estado_v = st.selectbox("Dictamen Final", ["APROBADO", "RECHAZADO"])
-    motivo_v = st.text_input("Observación o Motivo de Rechazo")
+    estado = st.selectbox("Dictamen", ["APROBADO", "RECHAZADO"])
+    obs = st.text_input("Observaciones")
     
-    if st.form_submit_button("✅ Guardar Vehículo"):
-        if estado_v == "RECHAZADO" and not motivo_v:
-            st.error("Debe escribir un motivo para los rechazos.")
-        else:
-            nueva_data = {
-                "Lote": lote_v, "Tipo": tipo_v, "Estado": estado_v, 
-                "Motivo": motivo_v if motivo_v else "Sin novedad",
-                "Humedad": h, "Impurezas": imp, "Dañados": dan, "Partidos": par, "Aflatoxinas": afla
-            }
-            st.session_state.lista_inspecciones.append(nueva_data)
-            st.success(f"Vehículo {lote_v} añadido.")
+    if st.form_submit_button("✅ Guardar en Lista"):
+        nueva_inspeccion = {
+            "Lote": lote, "Tipo": materia, "Humedad": h_val, 
+            "Impurezas": i_val, "Estado": estado, "Motivo": obs
+        }
+        st.session_state.lista_inspecciones.append(nueva_inspeccion)
+        st.success("Guardado localmente.")
 
-# --- TABLA Y REPORTE ---
+# TABLA Y PDF
 if st.session_state.lista_inspecciones:
     df = pd.DataFrame(st.session_state.lista_inspecciones)
-    
-    # Cálculos en pantalla para referencia rápida
-    df_ap = df[df['Estado'] == 'APROBADO']
-    
-    st.subheader("📊 Resumen de la Jornada")
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Analizados Hoy", len(df))
-    m2.metric("Aprobados", len(df_ap))
-    if not df_ap.empty:
-        m3.metric("Prom. Humedad (Aprobados)", f"{df_ap['Humedad'].mean():.2f}%")
-    
     st.dataframe(df, use_container_width=True)
-
-    c_btn1, c_btn2 = st.columns(2)
-    with c_btn1:
-        if st.button("📄 GENERAR PDF CONSOLIDADO"):
-            info_cab = {"fecha": fecha_hoy.strftime("%d/%m/%Y"), "centro": centro_trabajo, "analista": analista_calidad}
-            pdf_bytes = generar_reporte_consolidado(df, info_cab)
-            st.download_button("⬇️ Descargar Reporte Completo", data=bytes(pdf_bytes), file_name=f"RICP_{fecha_hoy.strftime('%d%m%Y')}.pdf")
     
-    with c_btn2:
-        if st.button("🗑️ Borrar Todo"):
-            st.session_state.lista_inspecciones = []
-            st.rerun()
+    if st.button("📄 GENERAR PDF"):
+        info = {"fecha": fecha_hoy.strftime("%d/%m/%Y"), "centro": centro_t, "analista": analista}
+        pdf_out = generar_reporte_consolidado(df, info)
+        st.download_button("⬇️ Descargar", data=bytes(pdf_out), file_name="reporte.pdf")
