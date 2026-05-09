@@ -30,18 +30,33 @@ def procesar_planilla_con_ia(imagen_pil):
 
     imagen_para_ia = {"mime_type": "image/jpeg", "data": img_bytes}
 
-    # Prompt modificado para que la IA no use marcas de código
-    prompt = "Analiza la planilla. Devuelve SOLO el texto del JSON, sin usar comillas inclinadas ni la palabra json."
+    prompt = """
+    Analiza la planilla de Alimentos Polar y extrae los datos. 
+    Es CRÍTICO que tu respuesta sea exclusivamente un objeto JSON válido.
+    Asegúrate de incluir:
+    - cabecera: analista, procedencia, placa, silo, destino, contrato, cereal, documento.
+    - items: valores del 01 al 20.
+    Si un valor no es legible, pon 0.0.
+    """
     
     response = model.generate_content([prompt, imagen_para_ia])
+    texto = response.text.strip()
     
-    # Limpieza súper simple para evitar errores de copiado
-    texto_final = response.text.strip()
-    
-    # Si por alguna razón la IA pone marcas, las quitamos de forma segura
-    texto_final = texto_final.replace('`', '').replace('json', '')
-    
-    return json.loads(texto_final.strip())
+    # --- BUSCADOR DE JSON ROBUSTO ---
+    try:
+        # Buscamos el primer '{' y el último '}' para ignorar cualquier texto extra
+        inicio = texto.find('{')
+        fin = texto.rfind('}') + 1
+        if inicio != -1 and fin != 0:
+            json_puro = texto[inicio:fin]
+            return json.loads(json_puro)
+        else:
+            return json.loads(texto) # Intento normal
+    except Exception as e:
+        st.error(f"Error al procesar el formato de la IA: {e}")
+        # Muestra lo que la IA respondió en la consola para depurar
+        print("Respuesta de la IA:", texto)
+        return {}
 
 st.title("🌾 Sistema de Recepción Inteligente - Provencesa")
 
