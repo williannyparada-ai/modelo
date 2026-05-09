@@ -16,8 +16,8 @@ def leer_ticket_con_ia_directo(imagen_pil, api_key):
         imagen_pil.save(buffered, format="JPEG")
         img_str = base64.b64encode(buffered.getvalue()).decode()
 
-        # 2. Configurar la URL de PRODUCCIÓN (v1), no la beta
-        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+        # 2. Configurar la URL de PRODUCCIÓN (v1beta), no la beta
+        url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=){api_key}"
         
         headers = {'Content-Type': 'application/json'}
         
