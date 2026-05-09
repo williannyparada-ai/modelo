@@ -7,11 +7,12 @@ import json
 import io
 
 # --- CONFIGURACIÓN DE IA ---
-# Asegúrate de tener GOOGLE_API_KEY en los Secrets de Streamlit
-genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-model = genai.GenerativeModel('gemini-1.5-flash')
-
-st.set_page_config(page_title="IA Provencesa - Recepción", layout="wide")
+try:
+    api_key = st.secrets["GOOGLE_API_KEY"]
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-1.5-flash')
+except Exception as e:
+    st.error("⚠️ La API Key no está configurada en los Secrets de Streamlit.")
 
 # Inicializar estados
 if 'datos_ia' not in st.session_state:
