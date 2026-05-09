@@ -41,9 +41,20 @@ def procesar_planilla_con_ia(imagen_pil):
     """
     
     response = model.generate_content([prompt, imagen_para_ia])
-    limpio = response.text.strip().replace('```json', '').replace('
-```', '')
-    return json.loads(limpio)
+    
+    # Esta es la forma más segura de limpiar el texto sin comillas complicadas
+    texto_sucio = response.text.strip()
+    
+    # Quitamos las marcas de bloque de código si existen
+    if "```" in texto_sucio:
+        texto_limpio = texto_sucio.split("
+```")[1]
+        if texto_limpio.startswith("json"):
+            texto_limpio = texto_limpio[4:]
+    else:
+        texto_limpio = texto_sucio
+        
+    return json.loads(texto_limpio.strip())
 
 st.title("🌾 Sistema de Recepción Inteligente - Provencesa")
 
