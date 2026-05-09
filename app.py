@@ -5,54 +5,26 @@ import pandas as pd
 import google.generativeai as genai
 from PIL import Image
 import os
-import requests
-import json
-import base64
-from io import BytesIO
 
-# --- LÓGICA DE IA (MÉTODO DE CONEXIÓN DIRECTA) ---
+# --- LÓGICA DE IA (MÉTODO OFICIAL) ---
 def leer_ticket_con_ia_directo(imagen_pil, api_key):
     try:
-        # 1. Convertir imagen a Base64
-        buffered = BytesIO()
-        imagen_pil.save(buffered, format="JPEG")
-        img_str = base64.b64encode(buffered.getvalue()).decode()
-
-        # 2. Configurar la URL de PRODUCCIÓN (v1), no la beta
-        # Intenta con v1beta que es donde reside Flash actualmente
-        # Versión Pro: Más robusta para lectura de tickets
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={api_key}"
+        # Configuración de la API oficial
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
-        headers = {'Content-Type': 'application/json'}
+        prompt = "Extrae de este ticket de Alimentos Polar los valores de Humedad e Impurezas. Responde solo siguiendo este formato estricto: Humedad: valor, Impurezas: valor"
         
-        prompt = "Extrae de este ticket de Alimentos Polar los valores de Humedad e Impurezas. Responde solo: Humedad: valor, Impurezas: valor"
+        # Envío directo de la imagen
+        response = model.generate_content([prompt, imagen_pil])
         
-        payload = {
-            "contents": [{
-                "parts": [
-                    {"text": prompt},
-                    {
-                        "inline_data": {
-                            "mime_type": "image/jpeg",
-                            "data": img_str
-                        }
-                    }
-                ]
-            }]
-        }
-
-        # 3. Hacer la petición directa al servidor
-        response = requests.post(url, headers=headers, json=payload)
-        res_json = response.json()
-
-        if response.status_code == 200:
-            texto_ia = res_json['candidates'][0]['content']['parts'][0]['text']
-            return texto_ia
+        if response.text:
+            return response.text
         else:
-            return f"Error del servidor ({response.status_code}): {res_json.get('error', {}).get('message', 'Desconocido')}"
-
+            return "Error: La IA no pudo procesar la imagen."
+            
     except Exception as e:
-        return f"Error de conexión: {str(e)}"
+        return f"Error de conexión/configuración: {str(e)}"
 
 # --- LÓGICA DEL PDF ---
 def generar_reporte_consolidado(df_datos, info_cabecera):
@@ -61,6 +33,7 @@ def generar_reporte_consolidado(df_datos, info_cabecera):
     pdf.set_font("helvetica", 'B', 16)
     pdf.cell(0, 10, "REGISTRO INSPECCIÓN CENTROS EXTERNOS PROVENCESA", align='C', new_x="LMARGIN", new_y="NEXT")
     pdf.ln(5)
+    
     pdf.set_font("helvetica", size=10)
     pdf.cell(90, 8, f"Fecha: {info_cabecera['fecha']}", border=1)
     pdf.cell(90, 8, f"Centro: {info_cabecera['centro']}", border=1)
@@ -68,12 +41,10 @@ def generar_reporte_consolidado(df_datos, info_cabecera):
     pdf.ln(10)
     
     pdf.set_font("helvetica", 'B', 9)
-    pdf.cell(30, 7, "Lote", border=1)
-    pdf.cell(50, 7, "Tipo", border=1)
-    pdf.cell(25, 7, "Hum %", border=1)
-    pdf.cell(25, 7, "Imp %", border=1)
-    pdf.cell(30, 7, "Estado", border=1)
-    pdf.cell(100, 7, "Observaciones", border=1, new_x="LMARGIN", new_y="NEXT")
+    columnas = [("Lote", 30), ("Tipo", 50), ("Hum %", 25), ("Imp %", 25), ("Estado", 30), ("Observaciones", 100)]
+    for col, ancho in columnas:
+        pdf.cell(ancho, 7, col, border=1)
+    pdf.ln(7)
     
     pdf.set_font("helvetica", size=9)
     for _, fila in df_datos.iterrows():
@@ -105,17 +76,19 @@ with st.sidebar:
         img = Image.open(archivo_img)
         st.image(img, caption="Ticket cargado", use_container_width=True)
         if st.button("🚀 Extraer Datos con IA"):
-            with st.spinner("Conectando con el servidor de Google..."):
+            with st.spinner("Procesando imagen con IA..."):
                 resultado = leer_ticket_con_ia_directo(img, api_key_input)
-                st.info(resultado)
+                st.info(f"Respuesta IA: {resultado}")
                 try:
-                    for linea in resultado.split('\n'):
-                        if "Humedad" in linea: 
-                            st.session_state.datos_ia["h"] = float(linea.split(":")[1].replace('%','').strip())
-                        if "Impurezas" in linea: 
-                            st.session_state.datos_ia["imp"] = float(linea.split(":")[1].replace('%','').strip())
-                except:
-                    st.warning("Extraído, pero verifica los decimales manualmente.")
+                    # Lógica para extraer los números de la respuesta
+                    for parte in resultado.split(','):
+                        if "Humedad" in parte:
+                            st.session_state.datos_ia["h"] = float(''.join(filter(lambda x: x.isdigit() or x=='.', parte)))
+                        if "Impurezas" in parte:
+                            st.session_state.datos_ia["imp"] = float(''.join(filter(lambda x: x.isdigit() or x=='.', parte)))
+                    st.success("Valores cargados correctamente.")
+                except Exception as e:
+                    st.warning("No se pudieron parsear los decimales automáticamente. Por favor, ingrésalos manual.")
 
 with st.expander("📝 Configuración de Cabecera"):
     c1, c2, c3 = st.columns(3)
@@ -130,8 +103,8 @@ with st.form("registro", clear_on_submit=True):
     materia = col2.selectbox("Materia Prima", ["Maiz Blanco Nac.", "Maiz Amar. Nac.", "Arroz Paddy"])
     
     f1, f2 = st.columns(2)
-    h_val = f1.number_input("Humedad %", value=st.session_state.datos_ia["h"])
-    i_val = f2.number_input("Impurezas %", value=st.session_state.datos_ia["imp"])
+    h_val = f1.number_input("Humedad %", value=st.session_state.datos_ia["h"], format="%.2f")
+    i_val = f2.number_input("Impurezas %", value=st.session_state.datos_ia["imp"], format="%.2f")
     
     estado = st.selectbox("Dictamen", ["APROBADO", "RECHAZADO"])
     obs = st.text_input("Observaciones")
@@ -142,7 +115,7 @@ with st.form("registro", clear_on_submit=True):
             "Impurezas": i_val, "Estado": estado, "Motivo": obs if obs else "Sin novedad"
         })
         st.session_state.datos_ia = {"h": 0.0, "imp": 0.0}
-        st.success("Guardado.")
+        st.success("Guardado en la tabla temporal.")
         st.rerun()
 
 if st.session_state.lista_inspecciones:
@@ -151,4 +124,4 @@ if st.session_state.lista_inspecciones:
     if st.button("📄 GENERAR PDF"):
         info = {"fecha": fecha_hoy.strftime("%d/%m/%Y"), "centro": centro_t, "analista": analista}
         pdf_out = generar_reporte_consolidado(df, info)
-        st.download_button("⬇️ Descargar PDF", data=bytes(pdf_out), file_name="reporte.pdf")
+        st.download_button("⬇️ Descargar PDF", data=bytes(pdf_out), file_name=f"reporte_{fecha_hoy}.pdf")
