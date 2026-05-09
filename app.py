@@ -19,7 +19,8 @@ def leer_ticket_con_ia_directo(imagen_pil, api_key):
         img_str = base64.b64encode(buffered.getvalue()).decode()
 
         # 2. Configurar la URL de PRODUCCIÓN (v1), no la beta
-        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+        # Intenta con v1beta que es donde reside Flash actualmente
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
         
         headers = {'Content-Type': 'application/json'}
         
