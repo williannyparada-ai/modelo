@@ -3,61 +3,71 @@ import pandas as pd
 from PIL import Image
 import pytesseract
 import re
+from fpdf import FPDF
 
-# --- MOTOR DE EXTRACCIÓN REAL ---
-def extraer_datos_ticket(imagen_pil):
-    # Convertimos la imagen a escala de grises para mejor lectura
-    texto = pytesseract.image_to_string(imagen_pil.convert('L'))
-    
-    # Creamos un diccionario para guardar lo encontrado
-    resultados = {str(i).zfill(2): 0.0 for i in range(1, 21)}
-    
-    # Buscamos números decimales en el texto extraído
-    # Esta es una lógica simplificada: busca patrones de números cerca de palabras clave
-    lineas = texto.split('\n')
-    
-    # Mapeo de palabras clave a sus índices en el ticket
-    mapeo = {
-        "Humedad": "01",
-        "Impureza": "02",
-        "Germen": "03",
-        "Calor": "04",
-        "Insectos": "05",
-        "Infectados": "06",
-        "Total de Granos": "07",
-        "Partido Peque": "08",
-        "Granos part": "09",
-        "Total Granos": "10",
-        "Cristalizados": "11",
-        "Peso Vol": "13"
-    }
+st.set_page_config(page_title="RICP Provencesa", layout="wide")
 
-    # Intentamos encontrar los valores en el texto
-    for linea in lineas:
-        for palabra, idx in mapeo.items():
-            if palabra.lower() in linea.lower():
-                # Buscamos el número decimal en esa línea
-                match = re.search(r"(\d+[.,]\d+)", linea)
-                if match:
-                    valor = match.group(1).replace(',', '.')
-                    resultados[idx] = float(valor)
-    
-    return resultados
+# Inicializar estados
+if 'datos' not in st.session_state:
+    st.session_state.datos = {str(i).zfill(2): 0.0 for i in range(1, 21)}
+if 'historico' not in st.session_state:
+    st.session_state.historico = []
 
-# --- INTERFAZ ---
-st.title("🌾 Escáner RICP Provencesa - Visión Real")
+st.title("🌾 RICP Provencesa - Visión Real 1-20")
 
+# --- LÓGICA DE ESCANEO ---
 with st.sidebar:
-    archivo = st.file_uploader("Subir planilla de Alimentos Polar", type=['jpg', 'jpeg', 'png'])
+    st.header("📸 Escaneo de Planilla")
+    archivo = st.file_uploader("Subir imagen de Alimentos Polar", type=['jpg', 'jpeg', 'png'])
+    
     if archivo:
-        img_carga = Image.open(archivo)
-        st.image(img_carga, use_container_width=True)
-        
-        if st.button("🔍 ESCANEAR TICKET REAL"):
-            with st.spinner("Leyendo caligrafía del analista..."):
-                datos_reales = extraer_datos_ticket(img_carga)
-                st.session_state.datos_escaneados = datos_reales
-                st.success("Lectura completada. Verifique los campos.")
+        img = Image.open(archivo)
+        st.image(img, use_container_width=True)
+        if st.button("🔍 LEER TICKET"):
+            try:
+                # Intento de lectura real
+                texto = pytesseract.image_to_string(img.convert('L'))
+                # Buscamos patrones numéricos (ejemplo: Humedad 12,10)
+                numeros = re.findall(r"(\d+[.,]\d+)", texto)
+                if len(numeros) >= 2:
+                    st.session_state.datos["01"] = float(numeros[0].replace(',', '.'))
+                    st.session_state.datos["02"] = float(numeros[1].replace(',', '.'))
+                    st.success(f"Detectado: H:{numeros[0]}% I:{numeros[1]}%")
+                else:
+                    st.warning("Caligrafía difícil de leer. Por favor, ingrese los datos manualmente.")
+            except Exception as e:
+                st.error("Configure 'packages.txt' en GitHub para activar el motor.")
 
-# --- FORMULARIO CON DATOS REALES ---
-# (Aquí el resto de tu código de los 20 campos, usando st.session_state.datos_escaneados)
+# --- FORMULARIO DE 20 CAMPOS ---
+with st.form("planilla_polar"):
+    st.subheader("📝 Datos del Análisis Físico")
+    c1, c2 = st.columns(2)
+    lote = c1.text_input("N° Control")
+    placa = c2.text_input("Placa")
+
+    # Generamos los 20 campos dinámicamente en 4 columnas
+    cols = st.columns(4)
+    nombres = ["Humedad", "Impureza", "Germen Dañado", "Dañado Calor", "Dañado Insecto", 
+               "Infectados", "Total Dañados", "Partidos Peq.", "Granos Part.", "Total Part.",
+               "Cristalizados", "Mezcla Color", "Peso Vol", "Color", "Olor", "Aflatoxina",
+               "Insectos V.", "Quemados", "Sensorial", "Semillas Obj."]
+    
+    inputs = {}
+    for i in range(1, 21):
+        idx = str(i).zfill(2)
+        with cols[(i-1)%4]:
+            # El valor por defecto viene del escáner si tuvo éxito
+            val_def = st.session_state.datos.get(idx, 0.0)
+            inputs[idx] = st.number_input(f"{idx}. {nombres[i-1]}", value=float(val_def), format="%.2f", step=0.01)
+
+    if st.form_submit_button("✅ GUARDAR REGISTRO"):
+        registro = {"Lote": lote, "Placa": placa, **inputs}
+        st.session_state.historico.append(registro)
+        st.balloons()
+        st.rerun()
+
+# --- TABLA Y PDF ---
+if st.session_state.historico:
+    df = pd.DataFrame(st.session_state.historico)
+    st.write("### Bitácora de Recepción")
+    st.dataframe(df)
