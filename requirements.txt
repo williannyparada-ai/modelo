@@ -1,6 +1,6 @@
 streamlit
-google-generativeai
 fpdf2
 pandas
+google-generativeai
 Pillow
 requests
