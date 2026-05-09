@@ -8,9 +8,9 @@ from PIL import Image
 # --- LÓGICA DE IA PARA ESCANEO ---
 def leer_ticket_con_ia(imagen_pil, api_key):
     try:
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=api_key, transport='rest')
         # Usamos el modelo flash que es el más rápido y estable
-        model = genai.GenerativeModel('gemini-1.5-pro')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         prompt = """
         Eres un analista de calidad de cereales. 
