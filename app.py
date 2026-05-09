@@ -21,7 +21,7 @@ if 'historico' not in st.session_state:
 
 # --- FUNCIÓN DE LECTURA INTELIGENTE ---
 def procesar_planilla_con_ia(imagen_pil):
-    # Convertir imagen a bytes para evitar el InvalidArgument Error
+    # Convertir imagen a bytes
     img_byte_arr = io.BytesIO()
     imagen_pil.save(img_byte_arr, format='JPEG')
     img_bytes = img_byte_arr.getvalue()
@@ -31,22 +31,19 @@ def procesar_planilla_con_ia(imagen_pil):
         "data": img_bytes
     }
 
-    prompt = """
-    Analiza esta planilla de Alimentos Polar. 
-    1. Extrae: Analista, Procedencia, Placa, Silo, Cereal, Documento.
-    2. Lee los valores del 01 al 20. 
-    3. Devuelve los datos en este JSON exacto:
-    {
-      "cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "cereal": "", "documento": ""},
-      "items": {"01": 0.0, "02": 0.0, ... "20": 0.0}
-    }
-    Usa solo números decimales para los ítems. No incluyas texto extra.
-    """
+    # Prompt simplificado para evitar errores de sintaxis en Python
+    prompt = "Analiza la planilla. Devuelve SOLO un JSON con 'cabecera' (analista, procedencia, placa, silo) e 'items' (del 01 al 20)."
     
     response = model.generate_content([prompt, imagen_para_ia])
-    texto_json = response.text.replace('```json', '').replace('
-```', '').strip()
-    return json.loads(texto_json)
+    
+    # Esta forma de limpiar es más segura contra errores de SyntaxError
+    limpio = response.text.strip()
+    if limpio.startswith("```json"):
+        limpio = limpio[7:]
+    if limpio.endswith("```"):
+        limpio = limpio[:-3]
+    
+    return json.loads(limpio.strip())
 
 # --- INTERFAZ ---
 st.title("🌾 Sistema de Recepción Inteligente - Provencesa")
