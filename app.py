@@ -6,13 +6,20 @@ from datetime import datetime
 import json
 import io
 
-# --- CONFIGURACIÓN DE IA ---
+# --- CONFIGURACIÓN DE IA ROBUSTA ---
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('models/gemini-1.5-flash-latest')
+    
+    # Buscamos dinámicamente un modelo que soporte generación de contenido
+    modelos_disponibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+    
+    # Priorizamos gemini-1.5-flash si aparece en la lista
+    nombre_modelo = next((m for m in modelos_disponibles if 'gemini-1.5-flash' in m), modelos_disponibles[0])
+    
+    model = genai.GenerativeModel(nombre_modelo)
 except Exception as e:
-    st.error("⚠️ La API Key no está configurada en los Secrets de Streamlit.")
+    st.error(f"Error al configurar el modelo: {e}")
 
 # Inicializar estados
 if 'datos_ia' not in st.session_state:
