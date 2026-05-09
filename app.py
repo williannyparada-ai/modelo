@@ -3,139 +3,100 @@ from fpdf import FPDF
 from datetime import datetime
 import pandas as pd
 import requests
-import json
 import base64
+import re
 from PIL import Image
 from io import BytesIO
 
-# --- CONEXIÓN DE EMERGENCIA GEMINI (INTENTO DE BYPASS 404) ---
-def leer_ticket_con_ia_directo(imagen_pil, api_key):
+# --- MOTOR DE ESCANEO REFORZADO ---
+def escanear_con_gemini(imagen_pil, api_key):
     try:
         buffered = BytesIO()
         imagen_pil.save(buffered, format="JPEG")
         img_str = base64.b64encode(buffered.getvalue()).decode()
 
-        # Probaremos con la versión estable v1 primero
+        # Intentamos con la URL v1 que suele ser la más compatible para cuentas gratuitas
         url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
         
         payload = {
             "contents": [{
                 "parts": [
-                    {"text": "Analiza el ticket. Extrae Humedad e Impurezas. Formato: H: valor, I: valor"},
+                    {"text": "Actúa como experto en control de calidad de cereales. Extrae del ticket: 1. Porcentaje de Humedad, 2. Porcentaje de Impurezas. Responde solo con los números separados por coma. Ejemplo: 12.5, 1.0"},
                     {"inline_data": {"mime_type": "image/jpeg", "data": img_str}}
                 ]
             }]
         }
 
-        response = requests.post(url, json=payload)
+        response = requests.post(url, json=payload, timeout=15)
         
-        # Si da error 404, intentamos automáticamente con la ruta v1beta
-        if response.status_code == 404:
-            url_beta = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-            response = requests.post(url_beta, json=payload)
+        # Si da 404, el código intentará automáticamente la ruta alterna sin que tú hagas nada
+        if response.status_code != 200:
+            url_alt = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+            response = requests.post(url_alt, json=payload, timeout=15)
 
         res_json = response.json()
-
+        
         if response.status_code == 200:
-            return res_json['candidates'][0]['content']['parts'][0]['text']
+            texto_ia = res_json['candidates'][0]['content']['parts'][0]['text']
+            # Extraemos solo los números usando expresiones regulares (Regex)
+            numeros = re.findall(r"[-+]?\d*\.\d+|\d+", texto_ia.replace(',', '.'))
+            return numeros
         else:
-            return f"Error {response.status_code}: {res_json.get('error', {}).get('message', 'Falla de red')}"
-
+            return f"Error {response.status_code}: {res_json.get('error', {}).get('message', 'Error de red')}"
     except Exception as e:
         return f"Error técnico: {str(e)}"
 
-# --- LÓGICA DEL REPORTE PDF ---
-def generar_reporte_consolidado(df_datos, info_cabecera):
-    pdf = FPDF(orientation='L', unit='mm', format='A4')
-    pdf.add_page()
-    pdf.set_font("helvetica", 'B', 16)
-    pdf.cell(0, 10, "REGISTRO INSPECCIÓN CENTROS EXTERNOS PROVENCESA", align='C', new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(5)
-    
-    pdf.set_font("helvetica", size=10)
-    pdf.cell(90, 8, f"Fecha: {info_cabecera['fecha']}", border=1)
-    pdf.cell(90, 8, f"Centro: {info_cabecera['centro']}", border=1)
-    pdf.cell(97, 8, f"Analista: {info_cabecera['analista']}", border=1, new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(10)
-    
-    pdf.set_font("helvetica", 'B', 9)
-    columnas = ["Lote", "Materia Prima", "Humedad %", "Impureza %", "Estado", "Observaciones"]
-    for col in columnas:
-        pdf.cell(45, 7, col, border=1)
-    pdf.ln()
-    
-    pdf.set_font("helvetica", size=9)
-    for _, fila in df_datos.iterrows():
-        pdf.cell(45, 7, str(fila['Lote']), border=1)
-        pdf.cell(45, 7, str(fila['Tipo']), border=1)
-        pdf.cell(45, 7, str(fila['Humedad']), border=1)
-        pdf.cell(45, 7, str(fila['Impurezas']), border=1)
-        pdf.cell(45, 7, fila['Estado'], border=1)
-        pdf.cell(45, 7, str(fila['Motivo']), border=1, new_x="LMARGIN", new_y="NEXT")
-    
-    return pdf.output()
+# --- INTERFAZ STREAMLIT ---
+st.set_page_config(page_title="Scanner Provencesa", layout="wide")
 
-# --- INTERFAZ ---
-st.set_page_config(page_title="RICP Provencesa", layout="wide")
-
-if 'lista_inspecciones' not in st.session_state:
-    st.session_state.lista_inspecciones = []
 if 'datos_ia' not in st.session_state:
     st.session_state.datos_ia = {"h": 0.0, "imp": 0.0}
+if 'lista' not in st.session_state:
+    st.session_state.lista = []
 
-st.title("🌾 RICP Provencesa - Escáner Inteligente")
+st.title("🌾 RICP Provencesa - Escáner de Resultados")
 
 with st.sidebar:
-    st.header("📸 Escanear Ticket")
-    api_key_input = st.text_input("Google API Key", type="password")
-    archivo_img = st.file_uploader("Subir ticket", type=['jpg', 'png', 'jpeg'])
+    st.header("📸 Captura de Ticket")
+    api_key = st.text_input("Ingresa tu API Key de Google", type="password")
+    archivo = st.file_uploader("Subir imagen del ticket", type=['jpg', 'jpeg', 'png'])
     
-    if archivo_img and api_key_input:
-        img = Image.open(archivo_img).convert("RGB")
+    if archivo and api_key:
+        img = Image.open(archivo).convert("RGB")
         st.image(img, use_container_width=True)
-        if st.button("🚀 Extraer Datos"):
-            with st.spinner("Intentando conectar con Google..."):
-                resultado = leer_ticket_con_ia_directo(img, api_key_input)
-                st.info(f"Respuesta: {resultado}")
-                import re
-                nums = re.findall(r"[-+]?\d*\.\d+|\d+", resultado.replace(',', '.'))
-                if len(nums) >= 2:
-                    st.session_state.datos_ia["h"] = float(nums[0])
-                    st.session_state.datos_ia["imp"] = float(nums[1])
-                    st.success("Valores detectados.")
+        if st.button("🔍 ESCANEAR RESULTADOS"):
+            with st.spinner("La IA está leyendo el ticket..."):
+                resultado = escanear_con_gemini(img, api_key)
+                if isinstance(resultado, list) and len(resultado) >= 2:
+                    st.session_state.datos_ia["h"] = float(resultado[0])
+                    st.session_state.datos_ia["imp"] = float(resultado[1])
+                    st.success(f"Detectado - Humedad: {resultado[0]}% | Impurezas: {resultado[1]}%")
+                else:
+                    st.error(f"No se pudo escanear: {resultado}")
 
-# Formulario
-with st.expander("📝 Configuración de Cabecera"):
-    c1, c2, c3 = st.columns(3)
-    fecha_hoy = c1.date_input("Fecha", datetime.now())
-    centro_t = c2.text_input("Centro", "Planta Araure")
-    analista = c3.selectbox("Analista", ["Willianny", "Yusmary", "Osmar"])
-
-st.header("🚚 Ingreso de Análisis")
+# Formulario de Registro
+st.subheader("🚚 Datos de Recepción")
 with st.form("registro", clear_on_submit=True):
-    col1, col2 = st.columns(2)
-    lote = col1.number_input("N° de Lote / Guía", step=1)
-    materia = col2.selectbox("Materia Prima", ["Maiz Blanco Nac.", "Maiz Amar. Nac.", "Arroz Paddy"])
+    c1, c2 = st.columns(2)
+    lote = c1.number_input("N° de Lote", step=1)
+    materia = c2.selectbox("Materia Prima", ["Maiz Blanco Nac.", "Maiz Amar. Nac.", "Arroz Paddy"])
     
     f1, f2 = st.columns(2)
-    h_val = f1.number_input("Humedad %", value=st.session_state.datos_ia["h"], format="%.2f")
-    i_val = f2.number_input("Impurezas %", value=st.session_state.datos_ia["imp"], format="%.2f")
+    # Estos valores se llenan SOLOS cuando el escaneo funciona
+    h_final = f1.number_input("Humedad %", value=st.session_state.datos_ia["h"], format="%.2f")
+    i_final = f2.number_input("Impurezas %", value=st.session_state.datos_ia["imp"], format="%.2f")
     
-    estado = st.selectbox("Dictamen", ["APROBADO", "RECHAZADO"])
-    obs = st.text_input("Observaciones")
+    dictamen = st.selectbox("Dictamen", ["APROBADO", "RECHAZADO"])
     
-    if st.form_submit_button("✅ Guardar"):
-        st.session_state.lista_inspecciones.append({
-            "Lote": lote, "Tipo": materia, "Humedad": h_val, 
-            "Impurezas": i_val, "Estado": estado, "Motivo": obs
+    if st.form_submit_button("✅ Guardar en Lista"):
+        st.session_state.lista.append({
+            "Lote": lote, "Materia": materia, "Humedad": h_final, "Impurezas": i_final, "Estado": dictamen
         })
-        st.session_state.datos_ia = {"h": 0.0, "imp": 0.0}
+        st.session_state.datos_ia = {"h": 0.0, "imp": 0.0} # Limpiar para el próximo
         st.rerun()
 
-if st.session_state.lista_inspecciones:
-    df = pd.DataFrame(st.session_state.lista_inspecciones)
-    st.table(df)
-    if st.button("📄 GENERAR REPORTE PDF"):
-        info = {"fecha": fecha_hoy.strftime("%d/%m/%Y"), "centro": centro_t, "analista": analista}
-        pdf_out = generar_reporte_consolidado(df, info)
-        st.download_button("⬇️ Descargar PDF", data=bytes(pdf_out), file_name=f"Reporte_{centro_t}.pdf")
+# Tabla de Resultados
+if st.session_state.lista:
+    st.write("### Resumen de Análisis")
+    df = pd.DataFrame(st.session_state.lista)
+    st.dataframe(df, use_container_width=True)
