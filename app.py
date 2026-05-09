@@ -30,31 +30,18 @@ def procesar_planilla_con_ia(imagen_pil):
 
     imagen_para_ia = {"mime_type": "image/jpeg", "data": img_bytes}
 
-    prompt = """
-    Analiza esta planilla de Alimentos Polar. Extrae: Analista, Procedencia, Placa, Silo, 
-    Destino, Contrato, Cereal y Documento. Luego lee los valores del 01 al 20.
-    Devuelve SOLO un JSON con esta estructura:
-    {
-      "cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "cereal": "", "documento": ""},
-      "items": {"01": 0.0, "02": 0.0, ... "20": 0.0}
-    }
-    """
+    # Prompt modificado para que la IA no use marcas de código
+    prompt = "Analiza la planilla. Devuelve SOLO el texto del JSON, sin usar comillas inclinadas ni la palabra json."
     
     response = model.generate_content([prompt, imagen_para_ia])
     
-    # Esta es la forma más segura de limpiar el texto sin comillas complicadas
-    texto_sucio = response.text.strip()
+    # Limpieza súper simple para evitar errores de copiado
+    texto_final = response.text.strip()
     
-    # Quitamos las marcas de bloque de código si existen
-    if "```" in texto_sucio:
-        texto_limpio = texto_sucio.split("
-```")[1]
-        if texto_limpio.startswith("json"):
-            texto_limpio = texto_limpio[4:]
-    else:
-        texto_limpio = texto_sucio
-        
-    return json.loads(texto_limpio.strip())
+    # Si por alguna razón la IA pone marcas, las quitamos de forma segura
+    texto_final = texto_final.replace('`', '').replace('json', '')
+    
+    return json.loads(texto_final.strip())
 
 st.title("🌾 Sistema de Recepción Inteligente - Provencesa")
 
