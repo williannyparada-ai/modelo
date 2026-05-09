@@ -11,7 +11,7 @@ def leer_ticket_con_ia_directo(imagen_pil, api_key):
     try:
         # Configuración de la API oficial
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-pro-vision')
         
         prompt = "Extrae de este ticket de Alimentos Polar los valores de Humedad e Impurezas. Responde solo siguiendo este formato estricto: Humedad: valor, Impurezas: valor"
         
