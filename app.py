@@ -17,6 +17,7 @@ try:
 except Exception as e:
     st.error(f"Error de configuración: {e}")
 
+# Configuración de página
 st.set_page_config(page_title="Registro de Información en Centros Externos Provencesa", layout="wide", page_icon="🌾")
 
 # --- MEMORIA DE LA SESIÓN ---
@@ -24,6 +25,8 @@ if 'historico' not in st.session_state:
     st.session_state.historico = []
 if 'datos_ia' not in st.session_state:
     st.session_state.datos_ia = {}
+if 'pdf_listo' not in st.session_state:
+    st.session_state.pdf_listo = None
 
 def procesar_planilla_con_ia(imagen_pil):
     img_byte_arr = io.BytesIO()
@@ -31,9 +34,10 @@ def procesar_planilla_con_ia(imagen_pil):
     img_bytes = img_byte_arr.getvalue()
     imagen_para_ia = {"mime_type": "image/jpeg", "data": img_bytes}
     
-    prompt = """Analiza la planilla. Devuelve SOLO un JSON con:
+    prompt = """Analiza la planilla de Alimentos Polar. Extrae:
     cabecera: (analista, procedencia, placa, silo, destino, contrato, cereal, documento)
-    items: (valores del 01 al 20). Si no se lee, pon 0.0."""
+    items: (valores del 01 al 20). 
+    Devuelve SOLO el JSON. Si algo no es legible pon 0.0."""
     
     response = model.generate_content([prompt, imagen_para_ia])
     texto = response.text.strip()
@@ -42,75 +46,68 @@ def procesar_planilla_con_ia(imagen_pil):
 
 st.title("🌾 Registro de Información en Centros Externos Provencesa")
 
-# --- PANEL DE ESTADÍSTICAS (ARRIBA) ---
+# --- 1. PANEL DE ESTADÍSTICAS (ARRIBA) ---
 if st.session_state.historico:
     df_hist = pd.DataFrame(st.session_state.historico)
-    col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
-    
-    with col_stat1:
-        st.metric("Total Vehículos", len(df_hist))
-    with col_stat2:
-        aprobados = len(df_hist[df_hist['Estatus'] == 'Aprobado'])
-        st.metric("✅ Aprobados", aprobados)
-    with col_stat3:
-        rechazados = len(df_hist[df_hist['Estatus'] == 'Rechazado'])
-        st.metric("❌ Rechazados", rechazados)
-    with col_stat4:
-        prom_hum = df_hist['Humedad'].mean()
-        st.metric("💧 Prom. Humedad", f"{prom_hum:.2f}%")
+    st.subheader("📊 Resumen de Jornada")
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total Vehículos", len(df_hist))
+    m2.metric("✅ Aprobados", len(df_hist[df_hist['Estatus'] == 'Aprobado']))
+    m3.metric("❌ Rechazados", len(df_hist[df_hist['Estatus'] == 'Rechazado']))
+    m4.metric("💧 Prom. Humedad", f"{df_hist['Humedad'].mean():.2f}%")
     st.divider()
 
-# --- SIDEBAR (CARGA) ---
+# --- 2. SIDEBAR (ESCÁNER) ---
 with st.sidebar:
-    st.header("📸 Escáner")
+    st.header("📸 Escáner de Planilla")
     archivo = st.file_uploader("Subir foto", type=['jpg', 'jpeg', 'png'])
     if archivo:
         img_pil = Image.open(archivo)
         st.image(img_pil, use_container_width=True)
         if st.button("🤖 LEER PLANILLA"):
             with st.spinner("IA Procesando..."):
-                st.session_state.datos_ia = procesar_planilla_con_ia(img_pil)
-                st.success("Lectura lista")
+                try:
+                    st.session_state.datos_ia = procesar_planilla_con_ia(img_pil)
+                    st.success("¡Lectura completada!")
+                except: st.error("Error al leer. Reintente.")
 
-# --- FORMULARIO DE REGISTRO ---
+# --- 3. FORMULARIO COMPLETO ---
 d = st.session_state.datos_ia
 cabe = d.get('cabecera', {})
 items = d.get('items', {})
 
-with st.form("registro_vehiculo"):
-    st.subheader("📝 Datos del Vehículo y Análisis")
+with st.form("registro_maestro"):
+    st.subheader("📋 Datos del Encabezado")
     c1, c2, c3, c4 = st.columns(4)
-    f_placa = c1.text_input("Placa", value=cabe.get('placa', ''))
-    f_cereal = c2.text_input("Cereal", value=cabe.get('cereal', ''))
-    f_humedad = c3.number_input("Humedad (%)", value=float(str(items.get('01', 0.0)).replace(',','.')))
-    f_impureza = c4.number_input("Impureza (%)", value=float(str(items.get('02', 0.0)).replace(',','.')))
+    f_analista = c1.text_input("Analista", value=cabe.get('analista', ''))
+    f_procedencia = c2.text_input("Procedencia", value=cabe.get('procedencia', ''))
+    f_placa = c3.text_input("Placa", value=cabe.get('placa', ''))
+    f_silo = c4.text_input("Silo", value=cabe.get('silo', ''))
+    
+    c5, c6, c7, c8 = st.columns(4)
+    f_destino = c5.text_input("Destino", value=cabe.get('destino', ''))
+    f_contrato = c6.text_input("Contrato", value=cabe.get('contrato', ''))
+    f_cereal = c7.text_input("Cereal", value=cabe.get('cereal', ''))
+    f_doc = c8.text_input("Documento", value=cabe.get('documento', ''))
 
     st.divider()
-    col_dec1, col_dec2 = st.columns(2)
-    with col_dec1:
-        f_estatus = st.radio("📢 Decisión de Recepción:", ["Aprobado", "Rechazado"], horizontal=True)
-    with col_dec2:
-        f_motivo = st.text_input("⚠️ Motivo de Rechazo (si aplica):", value="")
-
-    if st.form_submit_button("📥 REGISTRAR Y ACUMULAR"):
-        nuevo_registro = {
-            "Fecha": datetime.now().strftime("%H:%M:%S"),
-            "Placa": f_placa,
-            "Cereal": f_cereal,
-            "Humedad": f_humedad,
-            "Impureza": f_impureza,
-            "Estatus": f_estatus,
-            "Motivo": f_motivo if f_estatus == "Rechazado" else "N/A"
-        }
-        st.session_state.historico.append(nuevo_registro)
-        st.success(f"Vehículo {f_placa} registrado en el histórico.")
-        st.rerun()
-
-# --- TABLA DE REGISTROS ACUMULADOS ---
-if st.session_state.historico:
-    st.subheader("📋 Historial de Recepción del Día")
-    st.table(st.session_state.historico)
+    st.subheader("🔬 Resultados del Análisis Físico")
+    nombres = ["Humedad", "Impureza", "Germen Dañado", "Dañado Calor", "Dañado Insecto", 
+               "Infectados", "Total Dañados", "Partidos Peq.", "Granos Part.", "Total Part.",
+               "Cristalizados", "Mezcla Color", "Peso Vol", "Color", "Olor", "Aflatoxina",
+               "Insectos V.", "Quemados", "Sensorial", "Semillas Obj."]
     
-    if st.button("🗑️ Limpiar Historial"):
-        st.session_state.historico = []
-        st.rerun()
+    respuestas = {}
+    cols = st.columns(4)
+    for i in range(1, 21):
+        idx = str(i).zfill(2)
+        with cols[(i-1)%4]:
+            val_ia = items.get(idx, 0.0)
+            try: val_final = float(str(val_ia).replace(',','.'))
+            except: val_final = 0.0
+            respuestas[nombres[i-1]] = st.number_input(f"{idx}. {nombres[i-1]}", value=val_final)
+
+    st.divider()
+    st.subheader("📢 Decisión Final")
+    cd1, cd2 = st.columns(2)
+    f_estatus = cd1.radio("Estatus del Vehículo:", ["Aprobado", "Rechazado"], horizontal
