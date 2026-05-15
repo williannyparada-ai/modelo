@@ -16,7 +16,11 @@ try:
 except Exception as e:
     st.error(f"Error de configuración: {e}")
 
-st.set_page_config(page_title="IA Provencesa - Recepción", layout="wide")
+st.set_page_config(
+    page_title="Registro de Información en Centros Externos Provencesa", 
+    layout="wide", 
+    page_icon="🌾"
+)
 
 if 'datos_ia' not in st.session_state:
     st.session_state.datos_ia = {}
