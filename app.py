@@ -110,4 +110,41 @@ with st.form("registro_maestro"):
     st.divider()
     st.subheader("📢 Decisión Final")
     cd1, cd2 = st.columns(2)
-    f_estatus = cd1.radio("Estatus del Vehículo:", ["Aprobado", "Rechazado"], horizontal
+    f_estatus = cd1.radio("Estatus del Vehículo:", ["Aprobado", "Rechazado"], horizontal=True)
+    f_motivo = cd2.text_input("Motivo de Rechazo (si aplica):")
+
+    if st.form_submit_button("✅ REGISTRAR VEHÍCULO Y GENERAR REPORTE"):
+        # Acumular en historial
+        nuevo = {
+            "Fecha": datetime.now().strftime("%H:%M"), "Placa": f_placa,
+            "Cereal": f_cereal, "Humedad": respuestas["Humedad"],
+            "Estatus": f_estatus, "Motivo": f_motivo if f_estatus == "Rechazado" else "N/A"
+        }
+        st.session_state.historico.append(nuevo)
+        
+        # Generar PDF
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", 'B', 16)
+        pdf.cell(200, 10, "REPORTE DE CALIDAD - PROVENCESA", ln=True, align='C')
+        pdf.set_font("Arial", '', 11)
+        pdf.ln(5)
+        pdf.cell(0, 10, f"Placa: {f_placa} | Estatus: {f_estatus} | Analista: {f_analista}", ln=True)
+        pdf.ln(5)
+        for k, v in respuestas.items():
+            pdf.cell(60, 8, f"{k}: {v}", 1, 0)
+            if list(respuestas.keys()).index(k) % 3 == 2: pdf.ln(8)
+        
+        st.session_state.pdf_listo = pdf.output(dest='S').encode('latin-1')
+        st.rerun()
+
+# --- 4. ACCIONES POST-REGISTRO ---
+if st.session_state.pdf_listo:
+    st.download_button("📥 Descargar Reporte PDF del último vehículo", st.session_state.pdf_listo, "reporte.pdf", "application/pdf")
+
+if st.session_state.historico:
+    st.subheader("📋 Historial de Vehículos Registrados")
+    st.dataframe(pd.DataFrame(st.session_state.historico), use_container_width=True)
+    if st.button("🗑️ Limpiar Historial"):
+        st.session_state.historico = []
+        st.rerun()
