@@ -62,7 +62,7 @@ def procesar_planilla_con_ia(imagen_pil):
         print("Respuesta de la IA:", texto)
         return {}
 
-st.title("🌾 Sistema de Recepción Inteligente - Provencesa")
+st.title("🌾 Registro de Información en Centros Externos Provencesa")
 
 with st.sidebar:
     st.header("📸 Escáner")
