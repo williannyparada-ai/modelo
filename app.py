@@ -23,16 +23,20 @@ def procesar_planilla_con_ia(imagen_pil):
     imagen_pil.save(img_byte_arr, format='JPEG')
     img_bytes = img_byte_arr.getvalue()
     
-    prompt = """Analiza la planilla y extrae los datos.
-    Devuelve un JSON con este formato exacto:
-    {"cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "cereal": "", "documento": ""},
-     "items": {"01": 0.0, "02": 0.0, ... "20": 0.0}}
-    No incluyas texto extra, solo el JSON."""
+    # Prompt simplificado para asegurar que siempre devuelva un JSON
+    prompt = """Analiza la imagen de la planilla. 
+    Extrae los datos en formato JSON con estas llaves exactas: 
+    'cabecera' (analista, procedencia, placa, silo, destino, contrato, cereal, documento) 
+    'items' (numerados del '01' al '20'). 
+    Si no encuentras un valor, pon 0.0. 
+    Devuelve SOLO el objeto JSON, nada más."""
     
     try:
         response = model.generate_content([prompt, {"mime_type": "image/jpeg", "data": img_bytes}])
         texto = response.text.replace("```json", "").replace("```", "").strip()
-        inicio, fin = texto.find('{'), texto.rfind('}') + 1
+        # Buscamos el inicio y fin del JSON para evitar errores de texto basura
+        inicio = texto.find('{')
+        fin = texto.rfind('}') + 1
         return json.loads(texto[inicio:fin])
     except Exception as e:
         return None
@@ -45,7 +49,7 @@ nombres_items = [
     "Insectos V.", "Quemados", "Sensorial", "Fumonisina"
 ]
 
-# --- 1. RESUMEN DE JORNADA ---
+# --- 1. RESUMEN ---
 if st.session_state.historico:
     df_hist = pd.DataFrame(st.session_state.historico)
     st.subheader("📊 Resumen de Jornada")
@@ -59,15 +63,15 @@ if st.session_state.historico:
     m7.metric("🧪 Fumonisina", f"{df_hist['Fumonisina'].mean():.2f}")
     st.divider()
 
-# --- 2. SIDEBAR ESCÁNER ---
+# --- 2. SIDEBAR ---
 with st.sidebar:
     st.header("📸 Escáner")
     archivo = st.file_uploader("Subir foto", type=['jpg', 'png', 'jpeg'])
     if archivo and st.button("🤖 LEER PLANILLA"):
         with st.spinner("Procesando..."):
-            resultado = procesar_planilla_con_ia(Image.open(archivo))
-            if resultado:
-                st.session_state.datos_ia = resultado
+            res = procesar_planilla_con_ia(Image.open(archivo))
+            if res:
+                st.session_state.datos_ia = res
                 st.success("¡Datos extraídos!")
                 st.rerun()
             else:
@@ -114,10 +118,10 @@ with st.form("registro_maestro"):
             "Documento": f_doc, "Cereal": f_cereal, "Origen": f_origen, **vals_registro, "Estatus": f_estatus
         }
         st.session_state.historico.append(nuevo)
-        st.session_state.datos_ia = {} # Limpiar estado tras registro
+        st.session_state.datos_ia = {}
         st.rerun()
 
-# --- 4. TABLA Y EXCEL ---
+# --- 4. EXCEL ---
 if st.session_state.historico:
     df = pd.DataFrame(st.session_state.historico)
     cols_ordenadas = ["Fecha", "Analista", "Estatus", "Procedencia", "Destino", "Cereal", "Origen", "Silo", "Contrato", "Placa", "Documento"] + nombres_items
