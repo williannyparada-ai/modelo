@@ -12,7 +12,6 @@ st.set_page_config(page_title="Sistema Provencesa", layout="wide", page_icon="�
 if 'historico' not in st.session_state: st.session_state.historico = []
 if 'datos_ia' not in st.session_state: st.session_state.datos_ia = {}
 
-# Configuración IA
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
@@ -23,13 +22,15 @@ def procesar_planilla_con_ia(imagen_pil):
     img_byte_arr = io.BytesIO()
     imagen_pil.save(img_byte_arr, format='JPEG')
     img_bytes = img_byte_arr.getvalue()
-    prompt = """Analiza la planilla. Extrae cabecera y los 20 items. 
-    Devuelve SOLO JSON con estructura {'cabecera': {...}, 'items': {'01': val, ..., '20': val}}"""
+    prompt = """Analiza la planilla. Extrae: 
+    'cabecera': {analista, procedencia, placa, silo, destino, contrato, cereal, documento} 
+    'items': {valores del 01 al 20}. 
+    Devuelve SOLO JSON."""
     response = model.generate_content([prompt, {"mime_type": "image/jpeg", "data": img_bytes}])
     texto = response.text.strip()
     return json.loads(texto[texto.find('{'):texto.rfind('}')+1])
 
-# --- ESTRUCTURA DE DATOS ---
+# --- ESTRUCTURA DE ÍTEMS ---
 nombres_items = [
     "Humedad", "Impureza", "Germen Dañado", "Dañado Calor", "Dañado Insecto", 
     "Infectados", "Total Dañados", "Partidos Peq.", "Granos Part.", "Total Part.",
@@ -51,13 +52,16 @@ if st.session_state.historico:
     m7.metric("🧪 Fumonisina", f"{df_hist['Fumonisina'].mean():.2f}")
     st.divider()
 
-# --- 2. ESCÁNER ---
+# --- 2. SIDEBAR ESCÁNER ---
 with st.sidebar:
     st.header("📸 Escáner")
-    archivo = st.file_uploader("Subir planilla", type=['jpg', 'png'])
-    if archivo and st.button("🤖 LEER DATOS"):
-        st.session_state.datos_ia = procesar_planilla_con_ia(Image.open(archivo))
-        st.success("¡Datos extraídos!")
+    archivo = st.file_uploader("Subir foto", type=['jpg', 'png'])
+    if archivo and st.button("🤖 LEER PLANILLA"):
+        with st.spinner("Procesando..."):
+            try:
+                st.session_state.datos_ia = procesar_planilla_con_ia(Image.open(archivo))
+                st.success("¡Datos extraídos!")
+            except: st.error("Error al leer la imagen.")
 
 # --- 3. FORMULARIO COMPLETO ---
 d = st.session_state.datos_ia
@@ -65,13 +69,22 @@ cabe = d.get('cabecera', {})
 items = d.get('items', {})
 
 with st.form("registro_maestro"):
-    st.subheader("📋 Datos del Vehículo")
-    c1, c2, c3, c4, c5 = st.columns(5)
+    st.subheader("📋 Datos del Encabezado (Extraídos por IA)")
+    c1, c2, c3, c4 = st.columns(4)
     f_fecha = c1.date_input("Fecha", datetime.now())
     f_analista = c2.text_input("Analista", value=cabe.get('analista', ''))
-    f_placa = c3.text_input("Placa", value=cabe.get('placa', ''))
-    f_cereal = c4.selectbox("Cereal", ["Maíz Blanco", "Maíz Amarillo"])
-    f_origen = c5.selectbox("Origen", ["Nacional", "Importado"])
+    f_procedencia = c3.text_input("Procedencia", value=cabe.get('procedencia', ''))
+    f_placa = c4.text_input("Placa", value=cabe.get('placa', ''))
+    
+    c5, c6, c7, c8 = st.columns(4)
+    f_silo = c5.text_input("Silo", value=cabe.get('silo', ''))
+    f_destino = c6.text_input("Destino", value=cabe.get('destino', ''))
+    f_contrato = c7.text_input("Contrato", value=cabe.get('contrato', ''))
+    f_doc = c8.text_input("Documento", value=cabe.get('documento', ''))
+    
+    c9, c10 = st.columns(2)
+    f_cereal = c9.selectbox("Cereal", ["Maíz Blanco", "Maíz Amarillo"])
+    f_origen = c10.selectbox("Origen", ["Nacional", "Importado"])
     
     st.subheader("🔬 Resultados de Laboratorio")
     cols = st.columns(5)
@@ -84,22 +97,30 @@ with st.form("registro_maestro"):
     
     f_estatus = st.radio("Estatus:", ["Aprobado", "Rechazado"], horizontal=True)
 
-    if st.form_submit_button("✅ REGISTRAR Y GENERAR EXCEL"):
-        nuevo = {"Fecha": f_fecha.strftime("%Y-%m-%d"), "Analista": f_analista, "Placa": f_placa, 
-                 "Cereal": f_cereal, "Origen": f_origen, **vals_registro, "Estatus": f_estatus}
+    if st.form_submit_button("✅ REGISTRAR VEHÍCULO Y GENERAR EXCEL"):
+        nuevo = {
+            "Fecha": f_fecha.strftime("%Y-%m-%d"), "Analista": f_analista, "Procedencia": f_procedencia,
+            "Placa": f_placa, "Silo": f_silo, "Destino": f_destino, "Contrato": f_contrato, 
+            "Documento": f_doc, "Cereal": f_cereal, "Origen": f_origen, **vals_registro, "Estatus": f_estatus
+        }
         st.session_state.historico.append(nuevo)
         st.rerun()
 
 # --- 4. TABLA Y EXCEL ---
 if st.session_state.historico:
     df = pd.DataFrame(st.session_state.historico)
+    
+    # Ordenar columnas como en tu Excel
+    cols_ordenadas = ["Fecha", "Analista", "Estatus", "Procedencia", "Destino", "Cereal", "Origen", "Silo", "Contrato", "Placa", "Documento"] + nombres_items
+    df = df[cols_ordenadas]
+    
     st.dataframe(df, use_container_width=True)
     
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Reporte')
     
-    st.download_button("📥 Descargar Reporte Completo (Excel)", buffer.getvalue(), "Reporte_Provencesa.xlsx", "application/vnd.ms-excel")
+    st.download_button("📥 Descargar Reporte en Excel", buffer.getvalue(), "Reporte_Provencesa.xlsx", "application/vnd.ms-excel")
     
     if st.button("🗑️ Limpiar Historial"):
         st.session_state.historico = []
