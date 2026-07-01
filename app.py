@@ -23,22 +23,18 @@ def procesar_planilla_con_ia(imagen_pil):
     imagen_pil.save(img_byte_arr, format='JPEG')
     img_bytes = img_byte_arr.getvalue()
     
-    # Prompt simplificado para asegurar que siempre devuelva un JSON
-    prompt = """Analiza la imagen de la planilla. 
-    Extrae los datos en formato JSON con estas llaves exactas: 
-    'cabecera' (analista, procedencia, placa, silo, destino, contrato, cereal, documento) 
-    'items' (numerados del '01' al '20'). 
-    Si no encuentras un valor, pon 0.0. 
-    Devuelve SOLO el objeto JSON, nada más."""
+    prompt = """Analiza la planilla. Extrae los datos y devuelve SOLO un JSON válido con esta estructura:
+    {"cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "cereal": "", "documento": ""},
+     "items": {"01": 0.0, "02": 0.0, "03": 0.0, "04": 0.0, "05": 0.0, "06": 0.0, "07": 0.0, "08": 0.0, "09": 0.0, "10": 0.0, 
+               "11": 0.0, "12": 0.0, "13": 0.0, "14": 0.0, "15": 0.0, "16": 0.0, "17": 0.0, "18": 0.0, "19": 0.0, "20": 0.0}}"""
     
     try:
         response = model.generate_content([prompt, {"mime_type": "image/jpeg", "data": img_bytes}])
         texto = response.text.replace("```json", "").replace("```", "").strip()
-        # Buscamos el inicio y fin del JSON para evitar errores de texto basura
-        inicio = texto.find('{')
-        fin = texto.rfind('}') + 1
+        inicio, fin = texto.find('{'), texto.rfind('}') + 1
         return json.loads(texto[inicio:fin])
     except Exception as e:
+        st.error(f"Error técnico: {e}")
         return None
 
 # --- ESTRUCTURA ---
@@ -63,7 +59,7 @@ if st.session_state.historico:
     m7.metric("🧪 Fumonisina", f"{df_hist['Fumonisina'].mean():.2f}")
     st.divider()
 
-# --- 2. SIDEBAR ---
+# --- 2. ESCÁNER ---
 with st.sidebar:
     st.header("📸 Escáner")
     archivo = st.file_uploader("Subir foto", type=['jpg', 'png', 'jpeg'])
@@ -72,10 +68,9 @@ with st.sidebar:
             res = procesar_planilla_con_ia(Image.open(archivo))
             if res:
                 st.session_state.datos_ia = res
-                st.success("¡Datos extraídos!")
                 st.rerun()
             else:
-                st.error("Error al leer la imagen. Intenta con otra.")
+                st.error("Error al leer. Reintente.")
 
 # --- 3. FORMULARIO ---
 d = st.session_state.datos_ia
