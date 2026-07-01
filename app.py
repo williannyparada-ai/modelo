@@ -7,41 +7,46 @@ import json
 import io
 import pandas as pd
 
-# --- 1. CONFIGURACIÓN ---
+# --- CONFIGURACIÓN DE IA ---
 try:
-    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    # Usamos gemini-1.0-pro por estabilidad
-    model = genai.GenerativeModel('gemini-1.0-pro')
+    api_key = st.secrets["GOOGLE_API_KEY"]
+    genai.configure(api_key=api_key)
+    modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+    nombre_modelo = next((m for m in modelos if 'gemini-1.5-flash' in m), modelos[0])
+    model = genai.GenerativeModel(nombre_modelo)
 except Exception as e:
-    st.error(f"Error de configuración de IA: {e}")
+    st.error(f"Error de configuración: {e}")
 
-st.set_page_config(page_title="Sistema Provencesa", layout="wide", page_icon="🌾")
+# Configuración de página
+st.set_page_config(page_title="Registro de Información en Centros Externos Provencesa", layout="wide", page_icon="🌾")
 
-# --- MEMORIA Y ESTADO ---
-if 'historico' not in st.session_state: st.session_state.historico = []
-if 'datos_ia' not in st.session_state: st.session_state.datos_ia = {}
-if 'pdf_listo' not in st.session_state: st.session_state.pdf_listo = None
+# --- MEMORIA DE LA SESIÓN ---
+if 'historico' not in st.session_state:
+    st.session_state.historico = []
+if 'datos_ia' not in st.session_state:
+    st.session_state.datos_ia = {}
+if 'pdf_listo' not in st.session_state:
+    st.session_state.pdf_listo = None
 
-# --- 2. LÓGICA DE LECTURA (CÓDIGO ORIGINAL INTEGRADO) ---
 def procesar_planilla_con_ia(imagen_pil):
     img_byte_arr = io.BytesIO()
     imagen_pil.save(img_byte_arr, format='JPEG')
     img_bytes = img_byte_arr.getvalue()
+    imagen_para_ia = {"mime_type": "image/jpeg", "data": img_bytes}
     
     prompt = """Analiza la planilla de Alimentos Polar. Extrae:
     cabecera: (analista, procedencia, placa, silo, destino, contrato, cereal, documento)
     items: (valores del 01 al 20). 
     Devuelve SOLO el JSON. Si algo no es legible pon 0.0."""
     
-    response = model.generate_content([prompt, imagen_pil])
-    texto = response.text.replace("```json", "").replace("```", "").strip()
+    response = model.generate_content([prompt, imagen_para_ia])
+    texto = response.text.strip()
     inicio, fin = texto.find('{'), texto.rfind('}') + 1
     return json.loads(texto[inicio:fin])
 
-# --- 3. INTERFAZ Y LÓGICA DE JORNADA ---
 st.title("🌾 Registro de Información en Centros Externos Provencesa")
 
-# Estadísticas de la Jornada
+# --- 1. PANEL DE ESTADÍSTICAS (ARRIBA) ---
 if st.session_state.historico:
     df_hist = pd.DataFrame(st.session_state.historico)
     st.subheader("📊 Resumen de Jornada")
@@ -52,6 +57,7 @@ if st.session_state.historico:
     m4.metric("💧 Prom. Humedad", f"{df_hist['Humedad'].mean():.2f}%")
     st.divider()
 
+# --- 2. SIDEBAR (ESCÁNER) ---
 with st.sidebar:
     st.header("📸 Escáner de Planilla")
     archivo = st.file_uploader("Subir foto", type=['jpg', 'jpeg', 'png'])
@@ -63,11 +69,9 @@ with st.sidebar:
                 try:
                     st.session_state.datos_ia = procesar_planilla_con_ia(img_pil)
                     st.success("¡Lectura completada!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error al leer: {e}")
+                except: st.error("Error al leer. Reintente.")
 
-# Formulario Maestro
+# --- 3. FORMULARIO COMPLETO ---
 d = st.session_state.datos_ia
 cabe = d.get('cabecera', {})
 items = d.get('items', {})
@@ -75,17 +79,18 @@ items = d.get('items', {})
 with st.form("registro_maestro"):
     st.subheader("📋 Datos del Encabezado")
     c1, c2, c3, c4 = st.columns(4)
-    f_fecha = c1.text_input("Fecha", value=datetime.now().strftime("%Y/%m/%d"))
-    f_analista = c2.text_input("Analista", value=cabe.get('analista', ''))
-    f_procedencia = c3.text_input("Procedencia", value=cabe.get('procedencia', ''))
-    f_placa = c4.text_input("Placa", value=cabe.get('placa', ''))
+    f_analista = c1.text_input("Analista", value=cabe.get('analista', ''))
+    f_procedencia = c2.text_input("Procedencia", value=cabe.get('procedencia', ''))
+    f_placa = c3.text_input("Placa", value=cabe.get('placa', ''))
+    f_silo = c4.text_input("Silo", value=cabe.get('silo', ''))
     
     c5, c6, c7, c8 = st.columns(4)
-    f_silo = c5.text_input("Silo", value=cabe.get('silo', ''))
-    f_destino = c6.text_input("Destino", value=cabe.get('destino', ''))
-    f_contrato = c7.text_input("Contrato", value=cabe.get('contrato', ''))
+    f_destino = c5.text_input("Destino", value=cabe.get('destino', ''))
+    f_contrato = c6.text_input("Contrato", value=cabe.get('contrato', ''))
+    f_cereal = c7.text_input("Cereal", value=cabe.get('cereal', ''))
     f_doc = c8.text_input("Documento", value=cabe.get('documento', ''))
 
+    st.divider()
     st.subheader("🔬 Resultados del Análisis Físico")
     nombres = ["Humedad", "Impureza", "Germen Dañado", "Dañado Calor", "Dañado Insecto", 
                "Infectados", "Total Dañados", "Partidos Peq.", "Granos Part.", "Total Part.",
@@ -96,16 +101,25 @@ with st.form("registro_maestro"):
     cols = st.columns(4)
     for i in range(1, 21):
         idx = str(i).zfill(2)
-        val_ia = items.get(idx, 0.0)
         with cols[(i-1)%4]:
-            respuestas[nombres[i-1]] = st.number_input(f"{idx}. {nombres[i-1]}", value=float(val_ia))
+            val_ia = items.get(idx, 0.0)
+            try: val_final = float(str(val_ia).replace(',','.'))
+            except: val_final = 0.0
+            respuestas[nombres[i-1]] = st.number_input(f"{idx}. {nombres[i-1]}", value=val_final)
 
-    f_estatus = st.radio("Estatus:", ["Aprobado", "Rechazado"], horizontal=True)
-    f_motivo = st.text_input("Motivo de Rechazo:")
+    st.divider()
+    st.subheader("📢 Decisión Final")
+    cd1, cd2 = st.columns(2)
+    f_estatus = cd1.radio("Estatus del Vehículo:", ["Aprobado", "Rechazado"], horizontal=True)
+    f_motivo = cd2.text_input("Motivo de Rechazo (si aplica):")
 
     if st.form_submit_button("✅ REGISTRAR VEHÍCULO Y GENERAR REPORTE"):
-        nuevo = {"Fecha": f_fecha, "Placa": f_placa, "Humedad": respuestas["Humedad"], 
-                 "Estatus": f_estatus, "Motivo": f_motivo, **respuestas}
+        # Acumular en historial
+        nuevo = {
+            "Fecha": datetime.now().strftime("%H:%M"), "Placa": f_placa,
+            "Cereal": f_cereal, "Humedad": respuestas["Humedad"],
+            "Estatus": f_estatus, "Motivo": f_motivo if f_estatus == "Rechazado" else "N/A"
+        }
         st.session_state.historico.append(nuevo)
         
         # Generar PDF
@@ -113,24 +127,24 @@ with st.form("registro_maestro"):
         pdf.add_page()
         pdf.set_font("Arial", 'B', 16)
         pdf.cell(200, 10, "REPORTE DE CALIDAD - PROVENCESA", ln=True, align='C')
+        pdf.set_font("Arial", '', 11)
+        pdf.ln(5)
+        pdf.cell(0, 10, f"Placa: {f_placa} | Estatus: {f_estatus} | Analista: {f_analista}", ln=True)
+        pdf.ln(5)
+        for k, v in respuestas.items():
+            pdf.cell(60, 8, f"{k}: {v}", 1, 0)
+            if list(respuestas.keys()).index(k) % 3 == 2: pdf.ln(8)
+        
         st.session_state.pdf_listo = pdf.output(dest='S').encode('latin-1')
         st.rerun()
 
-# --- 4. EXPORTACIÓN Y ACCIONES ---
+# --- 4. ACCIONES POST-REGISTRO ---
 if st.session_state.pdf_listo:
-    st.download_button("📥 Descargar PDF", st.session_state.pdf_listo, "reporte.pdf", "application/pdf")
+    st.download_button("📥 Descargar Reporte PDF del último vehículo", st.session_state.pdf_listo, "reporte.pdf", "application/pdf")
 
 if st.session_state.historico:
-    st.subheader("📋 Historial de Vehículos")
-    df = pd.DataFrame(st.session_state.historico)
-    st.dataframe(df, use_container_width=True)
-    
-    # Exportar Excel
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False)
-    st.download_button("📥 Descargar Jornada en Excel", buffer.getvalue(), "Jornada_Provencesa.xlsx", "application/vnd.ms-excel")
-    
+    st.subheader("📋 Historial de Vehículos Registrados")
+    st.dataframe(pd.DataFrame(st.session_state.historico), use_container_width=True)
     if st.button("🗑️ Limpiar Historial"):
         st.session_state.historico = []
         st.rerun()
