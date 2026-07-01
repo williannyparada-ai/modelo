@@ -15,23 +15,35 @@ if 'datos_ia' not in st.session_state: st.session_state.datos_ia = {}
 # Configuración de IA - Usamos gemini-1.5-pro por mayor compatibilidad de API
 try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    model = genai.GenerativeModel('gemini-1.5-pro')
+    model = genai.GenerativeModel('gemini-1.5-flash')
 except Exception as e:
     st.error(f"Error de configuración de IA: {e}")
 
 def procesar_planilla_con_ia(imagen_pil):
-    prompt = """Analiza la planilla. Extrae los datos y devuelve SOLO un JSON válido con esta estructura:
+    # Aseguramos que la imagen esté en formato correcto
+    img_byte_arr = io.BytesIO()
+    imagen_pil.save(img_byte_arr, format='JPEG')
+    img_bytes = img_byte_arr.getvalue()
+    
+    # Preparamos el contenido como lo requiere la API oficial
+    image_part = {
+        "mime_type": "image/jpeg",
+        "data": img_bytes
+    }
+    
+    prompt = """Analiza la planilla y extrae los datos. Devuelve SOLO un JSON con:
     {"cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "cereal": "", "documento": ""},
      "items": {"01": 0.0, "02": 0.0, "03": 0.0, "04": 0.0, "05": 0.0, "06": 0.0, "07": 0.0, "08": 0.0, "09": 0.0, "10": 0.0, 
                "11": 0.0, "12": 0.0, "13": 0.0, "14": 0.0, "15": 0.0, "16": 0.0, "17": 0.0, "18": 0.0, "19": 0.0, "20": 0.0}}"""
     
     try:
-        response = model.generate_content([prompt, imagen_pil])
+        # Usamos generate_content con la estructura que la API espera
+        response = model.generate_content([prompt, image_part])
         texto = response.text.replace("```json", "").replace("```", "").strip()
         inicio, fin = texto.find('{'), texto.rfind('}') + 1
         return json.loads(texto[inicio:fin])
     except Exception as e:
-        st.error(f"Error al procesar la imagen: {e}")
+        st.error(f"Error de conexión con la IA: {e}")
         return None
 
 # --- ESTRUCTURA ---
