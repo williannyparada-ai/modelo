@@ -22,15 +22,22 @@ def procesar_planilla_con_ia(imagen_pil):
     img_byte_arr = io.BytesIO()
     imagen_pil.save(img_byte_arr, format='JPEG')
     img_bytes = img_byte_arr.getvalue()
-    prompt = """Analiza la planilla. Extrae: 
-    'cabecera': {analista, procedencia, placa, silo, destino, contrato, cereal, documento} 
-    'items': {valores del 01 al 20}. 
-    Devuelve SOLO JSON."""
-    response = model.generate_content([prompt, {"mime_type": "image/jpeg", "data": img_bytes}])
-    texto = response.text.strip()
-    return json.loads(texto[texto.find('{'):texto.rfind('}')+1])
+    
+    prompt = """Analiza la planilla y extrae los datos.
+    Devuelve un JSON con este formato exacto:
+    {"cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "cereal": "", "documento": ""},
+     "items": {"01": 0.0, "02": 0.0, ... "20": 0.0}}
+    No incluyas texto extra, solo el JSON."""
+    
+    try:
+        response = model.generate_content([prompt, {"mime_type": "image/jpeg", "data": img_bytes}])
+        texto = response.text.replace("```json", "").replace("```", "").strip()
+        inicio, fin = texto.find('{'), texto.rfind('}') + 1
+        return json.loads(texto[inicio:fin])
+    except Exception as e:
+        return None
 
-# --- ESTRUCTURA DE ÍTEMS ---
+# --- ESTRUCTURA ---
 nombres_items = [
     "Humedad", "Impureza", "Germen Dañado", "Dañado Calor", "Dañado Insecto", 
     "Infectados", "Total Dañados", "Partidos Peq.", "Granos Part.", "Total Part.",
@@ -55,21 +62,24 @@ if st.session_state.historico:
 # --- 2. SIDEBAR ESCÁNER ---
 with st.sidebar:
     st.header("📸 Escáner")
-    archivo = st.file_uploader("Subir foto", type=['jpg', 'png'])
+    archivo = st.file_uploader("Subir foto", type=['jpg', 'png', 'jpeg'])
     if archivo and st.button("🤖 LEER PLANILLA"):
         with st.spinner("Procesando..."):
-            try:
-                st.session_state.datos_ia = procesar_planilla_con_ia(Image.open(archivo))
+            resultado = procesar_planilla_con_ia(Image.open(archivo))
+            if resultado:
+                st.session_state.datos_ia = resultado
                 st.success("¡Datos extraídos!")
-            except: st.error("Error al leer la imagen.")
+                st.rerun()
+            else:
+                st.error("Error al leer la imagen. Intenta con otra.")
 
-# --- 3. FORMULARIO COMPLETO ---
+# --- 3. FORMULARIO ---
 d = st.session_state.datos_ia
 cabe = d.get('cabecera', {})
 items = d.get('items', {})
 
 with st.form("registro_maestro"):
-    st.subheader("📋 Datos del Encabezado (Extraídos por IA)")
+    st.subheader("📋 Datos del Encabezado")
     c1, c2, c3, c4 = st.columns(4)
     f_fecha = c1.date_input("Fecha", datetime.now())
     f_analista = c2.text_input("Analista", value=cabe.get('analista', ''))
@@ -97,23 +107,21 @@ with st.form("registro_maestro"):
     
     f_estatus = st.radio("Estatus:", ["Aprobado", "Rechazado"], horizontal=True)
 
-    if st.form_submit_button("✅ REGISTRAR VEHÍCULO Y GENERAR EXCEL"):
+    if st.form_submit_button("✅ REGISTRAR Y GENERAR EXCEL"):
         nuevo = {
             "Fecha": f_fecha.strftime("%Y-%m-%d"), "Analista": f_analista, "Procedencia": f_procedencia,
             "Placa": f_placa, "Silo": f_silo, "Destino": f_destino, "Contrato": f_contrato, 
             "Documento": f_doc, "Cereal": f_cereal, "Origen": f_origen, **vals_registro, "Estatus": f_estatus
         }
         st.session_state.historico.append(nuevo)
+        st.session_state.datos_ia = {} # Limpiar estado tras registro
         st.rerun()
 
 # --- 4. TABLA Y EXCEL ---
 if st.session_state.historico:
     df = pd.DataFrame(st.session_state.historico)
-    
-    # Ordenar columnas como en tu Excel
     cols_ordenadas = ["Fecha", "Analista", "Estatus", "Procedencia", "Destino", "Cereal", "Origen", "Silo", "Contrato", "Placa", "Documento"] + nombres_items
     df = df[cols_ordenadas]
-    
     st.dataframe(df, use_container_width=True)
     
     buffer = io.BytesIO()
