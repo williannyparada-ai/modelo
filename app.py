@@ -12,9 +12,9 @@ try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
     # Intentamos cargar un modelo compatible. 
     # 'gemini-1.5-flash' es el estándar actual. Si da error, puedes probar con 'gemini-pro'
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-pro')
 except Exception as e:
-    st.error(f"Error de configuración de IA: {e}")
+    st.error(f"Error de configuración: {e}")
 
 st.set_page_config(page_title="Sistema Provencesa", layout="wide", page_icon="🌾")
 
@@ -24,14 +24,18 @@ if 'pdf_listo' not in st.session_state: st.session_state.pdf_listo = None
 
 # --- 2. LÓGICA DE LECTURA (Basada en tu versión original que funcionaba) ---
 def procesar_planilla_con_ia(imagen_pil):
-    # Prompt para forzar JSON
+    # Convertimos la imagen
+    img_byte_arr = io.BytesIO()
+    imagen_pil.save(img_byte_arr, format='JPEG')
+    img_bytes = img_byte_arr.getvalue()
+    
     prompt = """Analiza la planilla. Extrae los datos y devuelve SOLO un JSON válido.
     Formato: {"cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "cereal": "", "documento": ""},
     "items": {"01": 0.0, "02": 0.0, "03": 0.0, "04": 0.0, "05": 0.0, "06": 0.0, "07": 0.0, "08": 0.0, "09": 0.0, "10": 0.0, 
               "11": 0.0, "12": 0.0, "13": 0.0, "14": 0.0, "15": 0.0, "16": 0.0, "17": 0.0, "18": 0.0, "19": 0.0, "20": 0.0}}"""
     
+    # Usamos la misma lógica que tenías al inicio, sin intentar listar modelos
     response = model.generate_content([prompt, imagen_pil])
-    # Limpiamos posibles etiquetas markdown de la respuesta
     texto = response.text.replace("```json", "").replace("```", "").strip()
     inicio, fin = texto.find('{'), texto.rfind('}') + 1
     return json.loads(texto[inicio:fin])
