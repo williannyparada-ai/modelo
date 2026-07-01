@@ -69,7 +69,11 @@ with st.sidebar:
         st.rerun()
 
 # --- 3. FORMULARIO ---
-d = st.session_state.datos_ia
+# Aseguramos que 'd' siempre sea un diccionario
+d = st.session_state.get('datos_ia', {})
+if d is None:
+    d = {}
+
 cabe = d.get('cabecera', {})
 items = d.get('items', {})
 
