@@ -69,17 +69,16 @@ with st.sidebar:
     st.header("📸 Escáner")
     archivo = st.file_uploader("Subir foto", type=['jpg', 'png', 'jpeg'])
     
-    # IMPORTANTE: Cambiamos ligeramente el orden
-    if archivo:
-        if st.button("🤖 LEER PLANILLA"):
-            with st.spinner("Procesando..."):
-                resultado = procesar_planilla_con_ia(Image.open(archivo))
-                if resultado:
-                    st.session_state.datos_ia = resultado
-                    st.success("¡Datos extraídos!")
-                    st.rerun() # Esto es vital para que el formulario se refresque con los nuevos datos
-                else:
-                    st.error("Error al leer la imagen. Intenta con otra.")
+    if archivo and st.button("🤖 LEER PLANILLA"):
+        with st.spinner("Procesando con IA..."):
+            # Pasamos directamente el objeto 'archivo'
+            resultado = procesar_planilla_con_ia(archivo) 
+            if resultado:
+                st.session_state.datos_ia = resultado
+                st.success("¡Lectura completada!")
+                st.rerun()
+            else:
+                st.error("No se pudo obtener una respuesta válida de la IA.")
 
 # --- 3. FORMULARIO ---
 # Aseguramos que 'd' siempre sea un diccionario
