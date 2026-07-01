@@ -19,23 +19,27 @@ try:
 except: st.error("Error de configuración de IA")
 
 # --- TU FUNCIÓN DE LECTURA (INTACTA) ---
-def procesar_planilla_con_ia(imagen_pil):
+def procesar_planilla_con_ia(archivo_subido):
+    # Abrir la imagen desde el objeto de Streamlit
+    imagen_pil = Image.open(archivo_subido)
+    
     img_byte_arr = io.BytesIO()
     imagen_pil.save(img_byte_arr, format='JPEG')
     img_bytes = img_byte_arr.getvalue()
     
-    prompt = """Analiza la planilla y extrae los datos.
-    Devuelve un JSON con este formato exacto:
+    prompt = """Analiza la planilla y extrae los datos. 
+    Responde estrictamente con un JSON sin formato Markdown:
     {"cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "documento": ""},
-     "items": {"01": 0.0, "02": 0.0, ... "20": 0.0}}
-    No incluyas texto extra, solo el JSON."""
+     "items": {"01": 0.0, "02": 0.0, "03": 0.0, "04": 0.0, "05": 0.0, "06": 0.0, "07": 0.0, "08": 0.0, "09": 0.0, "10": 0.0, "11": 0.0, "12": 0.0, "13": 0.0, "14": 0.0, "15": 0.0, "16": 0.0, "17": 0.0, "18": 0.0, "19": 0.0, "20": 0.0}}"""
     
     try:
         response = model.generate_content([prompt, {"mime_type": "image/jpeg", "data": img_bytes}])
+        # Limpieza más agresiva para asegurar que solo quede el JSON
         texto = response.text.replace("```json", "").replace("```", "").strip()
         inicio, fin = texto.find('{'), texto.rfind('}') + 1
         return json.loads(texto[inicio:fin])
     except Exception as e:
+        st.error(f"Detalle técnico del error: {e}") # Esto nos dirá exactamente por qué falla
         return None
 
 # --- NOMBRES PARA EL FORMULARIO ---
