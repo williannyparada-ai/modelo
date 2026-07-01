@@ -60,13 +60,22 @@ if st.session_state.historico:
     m7.metric("🧪 Fumonis.", f"{df_hist['Fumonisina'].mean():.2f}")
     st.divider()
 
-# --- 2. SIDEBAR ---
+# --- 2. SIDEBAR ESCÁNER ---
 with st.sidebar:
     st.header("📸 Escáner")
     archivo = st.file_uploader("Subir foto", type=['jpg', 'png', 'jpeg'])
-    if archivo and st.button("🤖 LEER PLANILLA"):
-        st.session_state.datos_ia = procesar_planilla_con_ia(Image.open(archivo))
-        st.rerun()
+    
+    # IMPORTANTE: Cambiamos ligeramente el orden
+    if archivo:
+        if st.button("🤖 LEER PLANILLA"):
+            with st.spinner("Procesando..."):
+                resultado = procesar_planilla_con_ia(Image.open(archivo))
+                if resultado:
+                    st.session_state.datos_ia = resultado
+                    st.success("¡Datos extraídos!")
+                    st.rerun() # Esto es vital para que el formulario se refresque con los nuevos datos
+                else:
+                    st.error("Error al leer la imagen. Intenta con otra.")
 
 # --- 3. FORMULARIO ---
 # Aseguramos que 'd' siempre sea un diccionario
