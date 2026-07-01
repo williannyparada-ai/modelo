@@ -79,31 +79,54 @@ d = st.session_state.get('datos_ia', {})
 cabe = d.get('cabecera', {})
 items = d.get('items', {})
 
+# --- 3. FORMULARIO ---
 with st.form("registro_maestro"):
-    col1, col2, col3, col4 = st.columns(4)
-    f_fecha = col1.date_input("Fecha", datetime.now())
-    f_cereal = col2.selectbox("Cereal", ["Maíz Blanco", "Maíz Amarillo"])
-    f_origen = col3.selectbox("Origen", ["Nacional", "Importado"])
-    f_estatus = col4.radio("Estatus:", ["Aprobado", "Rechazado"], horizontal=True)
-
+    st.subheader("📋 Datos del Encabezado")
     c1, c2, c3, c4 = st.columns(4)
-    f_analista = c1.text_input("Analista", value=cabe.get('analista', ''))
-    f_procedencia = c2.text_input("Procedencia", value=cabe.get('procedencia', ''))
-    f_placa = c3.text_input("Placa", value=cabe.get('placa', ''))
-    f_silo = c4.text_input("Silo", value=cabe.get('silo', ''))
+    f_fecha = c1.date_input("Fecha", datetime.now())
+    f_analista = c2.text_input("Analista", value=cabe.get('analista', ''))
+    f_procedencia = c3.text_input("Procedencia", value=cabe.get('procedencia', ''))
+    f_placa = c4.text_input("Placa", value=cabe.get('placa', ''))
+    
+    c5, c6, c7, c8 = st.columns(4)
+    f_silo = c5.text_input("Silo", value=cabe.get('silo', ''))
+    f_destino = c6.text_input("Destino", value=cabe.get('destino', ''))
+    f_contrato = c7.text_input("Contrato", value=cabe.get('contrato', ''))
+    f_doc = c8.text_input("Documento", value=cabe.get('documento', ''))
+    
+    c9, c10 = st.columns(2)
+    f_cereal = c9.selectbox("Cereal", ["Maíz Blanco", "Maíz Amarillo"])
+    f_origen = c10.selectbox("Origen", ["Nacional", "Importado"])
     
     st.subheader("🔬 Resultados de Laboratorio")
     cols = st.columns(5)
     vals_registro = {}
+    
     for i in range(20):
         idx = str(i+1).zfill(2)
+        # Aseguramos que el valor sea un número limpio antes de pasarlo al input
+        valor_bruto = items.get(idx, 0.0)
+        try:
+            val_limpio = float(valor_bruto)
+        except (ValueError, TypeError):
+            val_limpio = 0.0
+            
         with cols[i % 5]:
-            vals_registro[nombres_items[i]] = st.number_input(f"{nombres_items[i]}", value=float(items.get(idx, 0.0)))
+            vals_registro[nombres_items[i]] = st.number_input(f"{nombres_items[i]}", value=val_limpio, step=0.01)
+    
+    f_estatus = st.radio("Estatus:", ["Aprobado", "Rechazado"], horizontal=True)
 
-    if st.form_submit_button("✅ REGISTRAR Y GENERAR EXCEL"):
-        nuevo = {"Fecha": str(f_fecha), "Cereal": f_cereal, "Origen": f_origen, "Estatus": f_estatus, **vals_registro}
+    # --- EL BOTÓN DEBE IR AQUÍ, DENTRO DEL FORMULARIO ---
+    submit = st.form_submit_button("✅ REGISTRAR Y GENERAR EXCEL")
+    
+    if submit:
+        nuevo = {
+            "Fecha": f_fecha.strftime("%Y-%m-%d"), "Analista": f_analista, "Procedencia": f_procedencia,
+            "Placa": f_placa, "Silo": f_silo, "Destino": f_destino, "Contrato": f_contrato, 
+            "Documento": f_doc, "Cereal": f_cereal, "Origen": f_origen, **vals_registro, "Estatus": f_estatus
+        }
         st.session_state.historico.append(nuevo)
-        st.session_state.datos_ia = {}
+        st.session_state.datos_ia = {} 
         st.rerun()
 
 # --- 4. EXCEL ---
