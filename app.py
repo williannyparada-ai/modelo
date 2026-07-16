@@ -1,18 +1,44 @@
 import streamlit as st
 import google.generativeai as genai
-from PIL import Image, ImageDraw, ImageFont # Asegúrate de tener ImageDraw y ImageFont
+from PIL import Image, ImageDraw, ImageFont
 import io
 from datetime import datetime
 import json
 import pandas as pd
-from urllib.parse import quote # Para el botón de WhatsApp
+from urllib.parse import quote
 
 # --- FUNCIÓN GENERADORA DE IMAGEN ---
 def generar_reporte_infografia(df):
     promedios = df.mean(numeric_only=True)
+    # Crear lienzo blanco
     img = Image.new('RGB', (800, 1000), color=(255, 255, 255))
     draw = ImageDraw.Draw(img)
-    # ... resto del código de la función ...
+    
+    # Cargar logo desde la carpeta 'modelo'
+    try:
+        logo = Image.open("modelo/EPC_cep_pd_2010-sn.webp")
+        logo = logo.convert("RGBA")
+        logo = logo.resize((400, 130))
+        img.paste(logo, (200, 20), logo)
+    except Exception as e:
+        draw.text((200, 50), "EMPRESAS POLAR", fill=(0, 70, 127))
+
+    # Títulos
+    draw.text((230, 170), "REPORTE DIARIO DE RECEPCIÓN", fill=(0, 70, 127))
+    draw.text((320, 210), f"FECHA: {datetime.now().strftime('%d/%m/%Y')}", fill=(100, 100, 100))
+    
+    # Dibujar resultados
+    y = 280
+    for nombre in nombres_items:
+        valor = promedios.get(nombre, 0.0)
+        draw.text((100, y), f"{nombre}:", fill=(0, 0, 0))
+        draw.text((600, y), f"{valor:.2f}", fill=(0, 70, 127))
+        y += 40 
+        if y > 950: break
+    
+    # Footer
+    draw.text((300, 960), f"Vehículos analizados: {len(df)}", fill=(0, 70, 127))
+    
     buffer = io.BytesIO()
     img.save(buffer, format='PNG')
     return buffer.getvalue()
@@ -240,3 +266,25 @@ if st.button("🎨 Generar Infografía"):
         st.download_button("📥 Descargar Reporte (PNG)", data=img_bytes, 
                            file_name=f"Reporte_{datetime.now().strftime('%d%m%Y')}.png", 
                            mime="image/png")
+# --- 4. EXPORTACIÓN DE RESULTADOS ---
+if st.session_state.historico:
+    st.divider()
+    
+    # EXCEL
+    df = pd.DataFrame(st.session_state.historico)
+    buffer_xls = io.BytesIO()
+    with pd.ExcelWriter(buffer_xls, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False)
+    st.download_button("📥 Descargar Reporte Excel", buffer_xls.getvalue(), "Reporte.xlsx", "application/vnd.ms-excel")
+    
+    # IMAGEN PROFESIONAL
+    st.subheader("🖼️ Reporte Visual Profesional")
+    if st.button("🎨 Generar Infografía"):
+        with st.spinner("Diseñando reporte..."):
+            img_bytes = generar_reporte_infografia(pd.DataFrame(st.session_state.historico))
+            st.image(img_bytes, caption="Reporte generado")
+            st.download_button("📥 Descargar Reporte (PNG)", data=img_bytes, 
+                               file_name=f"Reporte_{datetime.now().strftime('%d%m%Y')}.png", 
+                               mime="image/png")
+else:
+    st.info("Aún no hay datos para generar reportes.")
