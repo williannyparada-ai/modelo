@@ -1,10 +1,21 @@
 import streamlit as st
 import google.generativeai as genai
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont # Asegúrate de tener ImageDraw y ImageFont
+import io
 from datetime import datetime
 import json
-import io
 import pandas as pd
+from urllib.parse import quote # Para el botón de WhatsApp
+
+# --- FUNCIÓN GENERADORA DE IMAGEN ---
+def generar_reporte_infografia(df):
+    promedios = df.mean(numeric_only=True)
+    img = Image.new('RGB', (800, 1000), color=(255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    # ... resto del código de la función ...
+    buffer = io.BytesIO()
+    img.save(buffer, format='PNG')
+    return buffer.getvalue()
 
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Sistema Provencesa", layout="wide", page_icon="🌾")
@@ -220,3 +231,12 @@ if st.session_state.historico:
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False)
     st.download_button("📥 Descargar Reporte Excel", buffer.getvalue(), "Reporte.xlsx", "application/vnd.ms-excel")
+    st.divider()
+st.subheader("🖼️ Reporte Visual Profesional")
+if st.button("🎨 Generar Infografía"):
+    with st.spinner("Diseñando reporte..."):
+        img_bytes = generar_reporte_infografia(pd.DataFrame(st.session_state.historico))
+        st.image(img_bytes, caption="Reporte listo para enviar")
+        st.download_button("📥 Descargar Reporte (PNG)", data=img_bytes, 
+                           file_name=f"Reporte_{datetime.now().strftime('%d%m%Y')}.png", 
+                           mime="image/png")
