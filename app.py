@@ -250,41 +250,28 @@ if st.session_state.historico:
 else:
     st.info("Aún no hay datos para generar el reporte.")
 
-# --- 4. EXCEL ---
-if st.session_state.historico:
-    df = pd.DataFrame(st.session_state.historico)
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False)
-    st.download_button("📥 Descargar Reporte Excel", buffer.getvalue(), "Reporte.xlsx", "application/vnd.ms-excel")
-    st.divider()
-st.subheader("🖼️ Reporte Visual Profesional")
-if st.button("🎨 Generar Infografía"):
-    with st.spinner("Diseñando reporte..."):
-        img_bytes = generar_reporte_infografia(pd.DataFrame(st.session_state.historico))
-        st.image(img_bytes, caption="Reporte listo para enviar")
-        st.download_button("📥 Descargar Reporte (PNG)", data=img_bytes, 
-                           file_name=f"Reporte_{datetime.now().strftime('%d%m%Y')}.png", 
-                           mime="image/png")
-# --- 4. EXPORTACIÓN DE RESULTADOS ---
+# --- 4. EXCEL Y REPORTE VISUAL ---
 if st.session_state.historico:
     st.divider()
     
-    # EXCEL
+    # 1. Descargar Excel
     df = pd.DataFrame(st.session_state.historico)
     buffer_xls = io.BytesIO()
     with pd.ExcelWriter(buffer_xls, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False)
     st.download_button("📥 Descargar Reporte Excel", buffer_xls.getvalue(), "Reporte.xlsx", "application/vnd.ms-excel")
     
-    # IMAGEN PROFESIONAL
+    # 2. Generar Infografía
     st.subheader("🖼️ Reporte Visual Profesional")
     if st.button("🎨 Generar Infografía"):
         with st.spinner("Diseñando reporte..."):
             img_bytes = generar_reporte_infografia(pd.DataFrame(st.session_state.historico))
             st.image(img_bytes, caption="Reporte generado")
-            st.download_button("📥 Descargar Reporte (PNG)", data=img_bytes, 
-                               file_name=f"Reporte_{datetime.now().strftime('%d%m%Y')}.png", 
-                               mime="image/png")
+            st.download_button(
+                "📥 Descargar Reporte (PNG)", 
+                data=img_bytes, 
+                file_name=f"Reporte_{datetime.now().strftime('%d%m%Y')}.png", 
+                mime="image/png"
+            )
 else:
     st.info("Aún no hay datos para generar reportes.")
