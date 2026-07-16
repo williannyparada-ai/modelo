@@ -7,42 +7,66 @@ import json
 import pandas as pd
 from urllib.parse import quote
 
-# --- FUNCIÓN GENERADORA DE IMAGEN ---
+# --- FUNCIÓN GENERADORA DE IMAGEN MEJORADA ---
 def generar_reporte_infografia(df):
     promedios = df.mean(numeric_only=True)
-    # Crear lienzo blanco
-    img = Image.new('RGB', (800, 1000), color=(255, 255, 255))
+    
+    # 1. Crear lienzo blanco (Aumenté el alto a 1100 para que respire más)
+    img = Image.new('RGB', (800, 1100), color=(255, 255, 255))
     draw = ImageDraw.Draw(img)
     
-    # Cargar logo desde la carpeta 'modelo'
+    # 2. Cargar logo y ajustar proporciones (NO deformar)
     try:
         logo = Image.open("modelo/EPC_cep_pd_2010-sn.webp")
         logo = logo.convert("RGBA")
-        logo = logo.resize((400, 130))
-        img.paste(logo, (200, 20), logo)
+        
+        # Obtenemos medidas originales
+        w_orig, h_orig = logo.size
+        
+        # Definimos un ancho máximo para el logo en el reporte (ej. 300px)
+        w_max = 300
+        # Calculamos el alto proporcional para que no se estire
+        h_nuevo = int((h_orig / w_orig) * w_max)
+        
+        # Redimensionamos manteniendo la relación de aspecto
+        logo = logo.resize((w_max, h_nuevo), Image.LANCZOS)
+        
+        # Pegamos el logo centrado (Coordenada X: (800 - 300)/2 = 250)
+        img.paste(logo, (250, 30), logo)
+        
+        # Ajustamos la posición vertical de los textos siguientes según el alto del logo
+        y_titulo = 30 + h_nuevo + 30 
     except Exception as e:
-        draw.text((200, 50), "EMPRESAS POLAR", fill=(0, 70, 127))
+        draw.text((250, 50), "EMPRESAS POLAR", fill=(0, 70, 127))
+        y_titulo = 200
 
-    # Títulos
-    draw.text((230, 170), "REPORTE DIARIO DE RECEPCIÓN", fill=(0, 70, 127))
-    draw.text((320, 210), f"FECHA: {datetime.now().strftime('%d/%m/%Y')}", fill=(100, 100, 100))
+    # 3. Títulos (Centrados y ajustados)
+    draw.text((270, y_titulo), "REPORTE DIARIO DE RECEPCIÓN", fill=(0, 70, 127))
+    draw.text((320, y_titulo + 35), f"FECHA: {datetime.now().strftime('%d/%m/%Y')}", fill=(100, 100, 100))
     
-    # Dibujar resultados
-    y = 280
+    # 4. Dibujar resultados (Alineados y centrados)
+    y = y_titulo + 100
+    x_etiqueta = 100
+    x_valor = 600
+
     for nombre in nombres_items:
         valor = promedios.get(nombre, 0.0)
-        draw.text((100, y), f"{nombre}:", fill=(0, 0, 0))
-        draw.text((600, y), f"{valor:.2f}", fill=(0, 70, 127))
-        y += 40 
-        if y > 950: break
+        
+        # Dibujamos etiqueta a la izquierda
+        draw.text((x_etiqueta, y), f"{nombre}:", fill=(0, 0, 0))
+        # Dibujamos valor a la derecha, con formato .2f
+        draw.text((x_valor, y), f"{valor:.2f}", fill=(0, 70, 127))
+        
+        y += 45 # Espaciado entre filas
+        
+        if y > 1000: break
     
     # Footer
-    draw.text((300, 960), f"Vehículos analizados: {len(df)}", fill=(0, 70, 127))
+    draw.text((300, 1050), f"Vehículos analizados: {len(df)}", fill=(0, 70, 127))
     
     buffer = io.BytesIO()
     img.save(buffer, format='PNG')
     return buffer.getvalue()
-
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Sistema Provencesa", layout="wide", page_icon="🌾")
 
