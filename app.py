@@ -163,6 +163,56 @@ with st.form("registro_maestro"):
         st.session_state.datos_ia = {} 
         st.rerun()
 
+# --- NUEVA SECCIÓN: REPORTE PARA WHATSAPP ---
+st.subheader("📱 Reporte para WhatsApp")
+
+if st.session_state.historico:
+    # 1. Definimos la función de generación (puedes ponerla al inicio de tu script también)
+    def generar_reporte_profesional(df):
+        promedios = df.mean(numeric_only=True)
+        reporte = "📋 *REPORTE DIARIO DE RECEPCIÓN*\n"
+        reporte += "========================================\n"
+        reporte += f"📅 FECHA: {datetime.now().strftime('%d/%m/%Y')}\n"
+        reporte += f"🚚 VEHÍCULOS: {len(df)}\n"
+        reporte += "========================================\n\n"
+        
+        campos = [
+            ("Humedad", "Humedad %"),
+            ("Impureza", "Impureza %"),
+            ("Total Dañados", "Grano Dañado Total (GDT)"),
+            ("Granos Part.", "Granos Partidos"),
+            ("Mezcla Color", "Mezcla Color"),
+            ("Peso Vol", "Peso Específico"),
+            ("Insectos V.", "Insectos Vivos"),
+            ("Aflatoxina", "Aflatoxinas Totales"),
+            ("Granos Part. Peq.", "Granos Partidos Pequeños"),
+            ("Fumonisina", "Fumonisina")
+        ]
+        
+        reporte += "📊 *RESULTADOS PROMEDIOS:*\n"
+        reporte += "----------------------------------------\n"
+        for key, label in campos:
+            valor = promedios.get(key, 0.0)
+            reporte += f"{label:<28} | {valor:>6.2f}\n"
+        
+        reporte += "----------------------------------------\n"
+        reporte += f"✅ Aprobados: {len(df[df['Estatus']=='Aprobado'])}  |  ❌ Rechazados: {len(df[df['Estatus']=='Rechazado'])}"
+        return reporte
+
+    # 2. Generamos el reporte
+    reporte_final = generar_reporte_profesional(pd.DataFrame(st.session_state.historico))
+    
+    # 3. Mostramos la vista previa estética
+    st.code(reporte_final, language="text")
+    
+    # 4. Botón para enviar (usamos 'quote' para que el texto sea una URL válida)
+    from urllib.parse import quote
+    link_wa = f"https://wa.me/?text={quote(reporte_final)}"
+    st.link_button("🚀 Enviar por WhatsApp", url=link_wa)
+
+else:
+    st.info("Aún no hay datos para generar el reporte.")
+
 # --- 4. EXCEL ---
 if st.session_state.historico:
     df = pd.DataFrame(st.session_state.historico)
