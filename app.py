@@ -49,18 +49,52 @@ def procesar_planilla_con_ia(archivo):
 # Etiquetas para resultados
 nombres_items = ["Humedad", "Impureza", "Germen Dañado", "Dañado Calor", "Dañado Insecto", "Infectados", "Total Dañados", "Partidos Peq.", "Granos Part.", "Total Part.", "Cristalizados", "Mezcla Color", "Peso Vol", "Color", "Olor", "Aflatoxina", "Insectos V.", "Quemados", "Sensorial", "Fumonisina"]
 
-# --- 1. RESUMEN DE JORNADA ---
+# --- 1. RESUMEN DE JORNADA Y TENDENCIAS ---
 if st.session_state.historico:
+    # Convertimos el histórico a DataFrame para facilitar los cálculos y gráficos
     df_hist = pd.DataFrame(st.session_state.historico)
+    
+    # Asegurarnos que la columna Fecha sea datetime para ordenar bien
+    df_hist['Fecha_Hora'] = pd.to_datetime(df_hist['Fecha'] + ' ' + datetime.now().strftime('%H:%M:%S'))
+
     st.subheader("📊 Resumen de Jornada")
-    m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
-    m1.metric("Total", len(df_hist))
-    m2.metric("✅ Aprob.", len(df_hist[df_hist['Estatus'] == 'Aprobado']))
-    m3.metric("❌ Rech.", len(df_hist[df_hist['Estatus'] == 'Rechazado']))
-    m4.metric("💧 Humedad", f"{df_hist['Humedad'].mean():.2f}")
-    m5.metric("🌾 GDT", f"{df_hist['Total Dañados'].mean():.2f}")
-    m6.metric("🍄 Aflatoxina", f"{df_hist['Aflatoxina'].mean():.2f}")
-    m7.metric("🧪 Fumonisina", f"{df_hist['Fumonisina'].mean():.2f}")
+    
+    # Métricas Principales (igual a como las tenías)
+    m1, m2, m3, m4 = st.columns(4) # Reduje a 4 columnas para que se vean mejor
+    m1.metric("Total Analizado", len(df_hist))
+    m2.metric("✅ Aprobados", len(df_hist[df_hist['Estatus'] == 'Aprobado']))
+    m3.metric("❌ Rechazados", len(df_hist[df_hist['Estatus'] == 'Rechazado']))
+    
+    # Promedios actuales
+    col_prom1, col_prom2, col_prom3, col_prom4 = st.columns(4)
+    col_prom1.metric("💧 Prom. Humedad", f"{df_hist['Humedad'].mean():.2f} %")
+    col_prom2.metric("🌾 Prom. GDT", f"{df_hist['Total Dañados'].mean():.2f} %")
+    col_prom3.metric("🍄 Prom. Aflatoxina", f"{df_hist['Aflatoxina'].mean():.2f} PPB")
+    col_prom4.metric("🧪 Prom. Fumonisina", f"{df_hist['Fumonisina'].mean():.2f} PPM")
+
+    st.write("") # Espacio en blanco
+    
+    # --- NUEVA SECCIÓN: Gráficos de Tendencia ---
+    with st.expander("📈 Ver Gráficos de Tendencia (vs. Registro #)", expanded=False):
+        # Usamos el índice del DataFrame como eje X (representa el orden de llegada)
+        
+        c1, c2 = st.columns(2)
+        
+        with c1:
+            st.caption("Tendencia de Humedad")
+            st.line_chart(df_hist['Humedad'], use_container_width=True)
+            
+            st.caption("Tendencia de Aflatoxina (PPB)")
+            # Configuramos color opcional si queremos personalizar (requiere Streamlit >= 1.20)
+            st.line_chart(df_hist['Aflatoxina'], color="#FFA07A", use_container_width=True)
+
+        with c2:
+            st.caption("Tendencia de Granos Dañados Totales (GDT)")
+            st.line_chart(df_hist['Total Dañados'], color="#90EE90", use_container_width=True)
+            
+            st.caption("Tendencia de Fumonisina (PPM)")
+            st.line_chart(df_hist['Fumonisina'], color="#BA55D3", use_container_width=True)
+
     st.divider()
 
 # --- 2. SIDEBAR ---
