@@ -107,16 +107,16 @@ def generar_reporte_infografia(df):
 
 # --- FUNCIÓN DE LECTURA (INDIVIDUAL) ---
 def procesar_planilla_con_ia(archivo):
-  imagen_pil = Image.open(archivo)
-  img_byte_arr = io.BytesIO()
-  imagen_pil.save(img_byte_arr, format="JPEG")
-  img_bytes = img_byte_arr.getvalue()
-
-  prompt = """Analiza la planilla y extrae los datos. Devuelve un JSON sin formato Markdown.
-    Formato: {"cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "documento": ""},
-    "items": {"01": 0.0, "02": 0.0, "03": 0.0, "04": 0.0, "05": 0.0, "06": 0.0, "07": 0.0, "08": 0.0, "09": 0.0, "10": 0.0, "11": 0.0, "12": 0.0, "13": 0.0, "14": 0.0, "15": 0.0, "16": 0.0, "17": 0.0, "18": 0.0, "19": 0.0, "20": 0.0}}"""
-
   try:
+    imagen_pil = Image.open(archivo).convert("RGB")
+    img_byte_arr = io.BytesIO()
+    imagen_pil.save(img_byte_arr, format="JPEG")
+    img_bytes = img_byte_arr.getvalue()
+
+    prompt = """Analiza la planilla y extrae los datos. Devuelve un JSON sin formato Markdown.
+      Formato: {"cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "documento": ""},
+      "items": {"01": 0.0, "02": 0.0, "03": 0.0, "04": 0.0, "05": 0.0, "06": 0.0, "07": 0.0, "08": 0.0, "09": 0.0, "10": 0.0, "11": 0.0, "12": 0.0, "13": 0.0, "14": 0.0, "15": 0.0, "16": 0.0, "17": 0.0, "18": 0.0, "19": 0.0, "20": 0.0}}"""
+
     response = model.generate_content(
         [prompt, {"mime_type": "image/jpeg", "data": img_bytes}]
     )
@@ -128,21 +128,33 @@ def procesar_planilla_con_ia(archivo):
     return None
 
 
-# --- FUNCIÓN DE LECTURA EN LOTE ---
+# --- FUNCIÓN DE LECTURA EN LOTE (MEJORADA Y ROBUSTA) ---
 def procesar_bytes_planilla_con_ia(img_bytes):
-  prompt = """Analiza la planilla y extrae los datos. Devuelve un JSON sin formato Markdown estricto.
-    Formato requerido: 
+  try:
+    imagen_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+    img_byte_arr = io.BytesIO()
+    imagen_pil.save(img_byte_arr, format="JPEG")
+    img_bytes_limpios = img_byte_arr.getvalue()
+
+    prompt = """Analiza la imagen de esta planilla de laboratorio agroindustrial. Extrae la información disponible de los campos de cabecera y los 20 ítems numéricos de laboratorio. 
+    Devuelve ÚNICAMENTE un objeto JSON válido sin bloques de código ni texto adicional, respetando exactamente esta estructura:
     {
       "cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "documento": ""},
       "items": {"01": 0.0, "02": 0.0, "03": 0.0, "04": 0.0, "05": 0.0, "06": 0.0, "07": 0.0, "08": 0.0, "09": 0.0, "10": 0.0, "11": 0.0, "12": 0.0, "13": 0.0, "14": 0.0, "15": 0.0, "16": 0.0, "17": 0.0, "18": 0.0, "19": 0.0, "20": 0.0}
     }"""
-  try:
+
     response = model.generate_content(
-        [prompt, {"mime_type": "image/jpeg", "data": img_bytes}]
+        [prompt, {"mime_type": "image/jpeg", "data": img_bytes_limpios}]
     )
-    texto = response.text.replace("```json", "").replace("```", "").strip()
+    texto = (
+        response.text.replace("```json", "")
+        .replace("```", "")
+        .strip()
+    )
     inicio, fin = texto.find("{"), texto.rfind("}") + 1
-    return json.loads(texto[inicio:fin])
+    if inicio != -1 and fin != 0:
+      return json.loads(texto[inicio:fin])
+    return None
   except Exception as e:
     return None
 
