@@ -61,11 +61,9 @@ except Exception as e:
 def generar_reporte_infografia(df):
   promedios = df.mean(numeric_only=True)
 
-  # 1. Crear lienzo blanco
   img = Image.new("RGB", (800, 1100), color=(255, 255, 255))
   draw = ImageDraw.Draw(img)
 
-  # 2. Cargar logo y ajustar proporciones
   try:
     logo = Image.open("modelo/EPC_cep_pd_2010-sn.webp")
     logo = logo.convert("RGBA")
@@ -79,7 +77,6 @@ def generar_reporte_infografia(df):
     draw.text((250, 50), "EMPRESAS POLAR", fill=(0, 70, 127))
     y_titulo = 200
 
-  # 3. Títulos
   draw.text((270, y_titulo), "REPORTE DIARIO DE RECEPCIÓN", fill=(0, 70, 127))
   draw.text(
       (320, y_titulo + 35),
@@ -87,7 +84,6 @@ def generar_reporte_infografia(df):
       fill=(100, 100, 100),
   )
 
-  # 4. Dibujar resultados
   y = y_titulo + 100
   x_etiqueta = 100
   x_valor = 600
@@ -100,7 +96,6 @@ def generar_reporte_infografia(df):
     if y > 1000:
       break
 
-  # Footer
   draw.text(
       (300, 1050), f"Vehículos analizados: {len(df)}", fill=(0, 70, 127)
   )
@@ -133,7 +128,7 @@ def procesar_planilla_con_ia(archivo):
     return None
 
 
-# --- FUNCIÓN DE LECTURA EN LOTE (NUEVA) ---
+# --- FUNCIÓN DE LECTURA EN LOTE ---
 def procesar_bytes_planilla_con_ia(img_bytes):
   prompt = """Analiza la planilla y extrae los datos. Devuelve un JSON sin formato Markdown estricto.
     Formato requerido: 
@@ -203,11 +198,10 @@ if st.session_state.historico:
 
   st.divider()
 
-# --- 2. SIDEBAR (CON CARGA EN LOTE Y MODO INDIVIDUAL) ---
+# --- 2. SIDEBAR ---
 with st.sidebar:
   st.header("📸 Escáner")
 
-  # Pestañas en el sidebar para elegir entre 1 sola foto o un lote completo
   modo_carga = st.radio("Modo de escaneo:", ["Individual", "Carga en Lote"])
 
   if modo_carga == "Individual":
@@ -218,7 +212,7 @@ with st.sidebar:
         if resultado:
           st.session_state.datos_ia = resultado
           st.rerun()
-else:
+  else:
     archivos_lote = st.file_uploader(
         "Subir múltiples fotos",
         type=["jpg", "png", "jpeg"],
@@ -263,11 +257,9 @@ else:
             st.session_state.historico.append(nuevo_registro)
             procesados_exito += 1
           else:
-            st.warning(
-                f"La IA no devolvió datos para el archivo: {archivo_item.name}"
-            )
+            st.warning(f"Sin datos en: {archivo_item.name}")
         except Exception as ex:
-          st.error(f"Error en archivo {archivo_item.name}: {ex}")
+          st.error(f"Error en {archivo_item.name}: {ex}")
 
         barra_progreso.progress((i + 1) / total_archivos)
 
@@ -277,10 +269,16 @@ else:
         )
         st.rerun()
       else:
-        st.error(
-            "No se pudo procesar ningún archivo del lote. Revisa los errores"
-            " arriba."
-        )
+        st.error("No se pudo procesar ningún archivo. Revisa los errores.")
+
+  st.divider()
+
+  st.subheader("🗑️ Gestión de Jornada")
+  if st.button("🧹 Limpiar Registro Actual"):
+    st.session_state.historico = []
+    st.session_state.datos_ia = {}
+    st.success("¡Registro limpiado con éxito!")
+    st.rerun()
 
 # --- 3. FORMULARIO ---
 d = st.session_state.get("datos_ia", {})
@@ -347,7 +345,7 @@ with st.form("registro_maestro"):
     st.session_state.datos_ia = {}
     st.rerun()
 
-# --- NUEVA SECCIÓN: REPORTE PARA WHATSAPP ---
+# --- REPORTE PARA WHATSAPP ---
 st.subheader("📱 Reporte para WhatsApp")
 
 if st.session_state.historico:
