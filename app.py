@@ -1,7 +1,7 @@
 from datetime import datetime
 import io
 import json
-import time  # Pausa anti-saturación
+import time
 from urllib.parse import quote
 import google.generativeai as genai
 from PIL import Image, ImageDraw, ImageFont
@@ -129,7 +129,7 @@ def procesar_planilla_con_ia(archivo):
     return None
 
 
-# --- FUNCIÓN DE LECTURA EN LOTE (CON PAUSA Y MANEJO DE ERRORES) ---
+# --- FUNCIÓN DE LECTURA EN BLOQUE ---
 def procesar_bytes_planilla_con_ia(img_bytes):
   try:
     imagen_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
@@ -157,7 +157,7 @@ def procesar_bytes_planilla_con_ia(img_bytes):
       return json.loads(texto[inicio:fin])
     return None
   except Exception as e:
-    raise e  # Propagamos el error exacto para depurar
+    raise e
 
 
 # --- 1. RESUMEN DE JORNADA Y TENDENCIAS ---
@@ -215,7 +215,7 @@ if st.session_state.historico:
 with st.sidebar:
   st.header("📸 Escáner")
 
-  modo_carga = st.radio("Modo de escaneo:", ["Individual", "Carga en Lote"])
+  modo_carga = st.radio("Modo de escaneo:", ["Individual", "Bloque de 5"])
 
   if modo_carga == "Individual":
     archivo = st.file_uploader("Subir foto", type=["jpg", "png", "jpeg"])
@@ -226,73 +226,76 @@ with st.sidebar:
           st.session_state.datos_ia = resultado
           st.rerun()
   else:
+    st.info("Sube hasta 40 fotos y procesa de 5 en 5 sin saturar la API.")
     archivos_lote = st.file_uploader(
-        "Subir múltiples fotos",
+        "Subir fotos de los vehículos",
         type=["jpg", "png", "jpeg"],
         accept_multiple_files=True,
     )
-    if archivos_lote and st.button("🤖 PROCESAR LOTE"):
-      barra_progreso = st.progress(0)
-      total_archivos = len(archivos_lote)
-      procesados_exito = 0
 
-      for i, archivo_item in enumerate(archivos_lote):
-        try:
-          img_bytes = archivo_item.getvalue()
-          res_json = procesar_bytes_planilla_con_ia(img_bytes)
+    if archivos_lote:
+      total_subidos = len(archivos_lote)
+      st.caption(f"📁 Total cargadas en memoria: {total_subidos} fotos.")
 
-          # Pausa de 4 segundos para evitar saturar el límite de solicitudes por minuto (RPM)
-          time.sleep(4)
+      # Botón para procesar solo el siguiente bloque de 5
+      if st.button("🤖 PROCESAR SIGUIENTE BLOQUE (5)"):
+        # Tomamos los primeros 5 archivos de la lista actual
+        lote_actual = archivos_lote[:5]
+        barra_progreso = st.progress(0)
+        total_archivos = len(lote_actual)
+        procesados_exito = 0
 
-          if res_json:
-            cabe_lote = res_json.get("cabecera", {})
-            items_lote = res_json.get("items", {})
+        for i, archivo_item in enumerate(lote_actual):
+          try:
+            img_bytes = archivo_item.getvalue()
+            res_json = procesar_bytes_planilla_con_ia(img_bytes)
 
-            vals_lote = {}
-            for idx_item in range(20):
-              k_str = str(idx_item + 1).zfill(2)
-              try:
-                val_L = float(items_lote.get(k_str, 0.0))
-              except:
-                val_L = 0.0
-              vals_lote[nombres_items[idx_item]] = val_L
+            # Pausa breve de 3 segundos entre cada una del bloque de 5
+            time.sleep(3)
 
-            nuevo_registro = {
-                "Fecha": datetime.now().strftime("%Y-%m-%d"),
-                "Analista": cabe_lote.get("analista", "Automático"),
-                "Procedencia": cabe_lote.get("procedencia", "N/D"),
-                "Placa": cabe_lote.get("placa", "N/D"),
-                "Silo": cabe_lote.get("silo", "N/D"),
-                "Destino": cabe_lote.get("destino", "N/D"),
-                "Contrato": cabe_lote.get("contrato", "N/D"),
-                "Documento": cabe_lote.get("documento", "N/D"),
-                "Cereal": "Maíz Blanco",
-                "Origen": "Nacional",
-                **vals_lote,
-                "Estatus": "Aprobado",
-            }
-            st.session_state.historico.append(nuevo_registro)
-            procesados_exito += 1
-          else:
-            st.warning(
-                f"La IA no devolvió estructura en: {archivo_item.name}"
-            )
-        except Exception as ex:
-          st.error(f"Error crítico en {archivo_item.name}: {ex}")
+            if res_json:
+              cabe_lote = res_json.get("cabecera", {})
+              items_lote = res_json.get("items", {})
 
-        barra_progreso.progress((i + 1) / total_archivos)
+              vals_lote = {}
+              for idx_item in range(20):
+                k_str = str(idx_item + 1).zfill(2)
+                try:
+                  val_L = float(items_lote.get(k_str, 0.0))
+                except:
+                  val_L = 0.0
+                vals_lote[nombres_items[idx_item]] = val_L
 
-      if procesados_exito > 0:
-        st.success(
-            f"¡Lote procesado! Se añadieron {procesados_exito} de"
-            f" {total_archivos} registros."
-        )
-        st.rerun()
-      else:
-        st.error(
-            "No se pudo procesar ningún archivo. Revisa si apareció un error"
-            " de cuota (429)."
-        )
+              nuevo_registro = {
+                  "Fecha": datetime.now().strftime("%Y-%m-%d"),
+                  "Analista": cabe_lote.get("analista", "Automático"),
+                  "Procedencia": cabe_lote.get("procedencia", "N/D"),
+                  "Placa": cabe_lote.get("placa", "N/D"),
+                  "Silo": cabe_lote.get("silo", "N/D"),
+                  "Destino": cabe_lote.get("destino", "N/D"),
+                  "Contrato": cabe_lote.get("contrato", "N/D"),
+                  "Documento": cabe_lote.get("documento", "N/D"),
+                  "Cereal": "Maíz Blanco",
+                  "Origen": "Nacional",
+                  **vals_lote,
+                  "Estatus": "Aprobado",
+              }
+              st.session_state.historico.append(nuevo_registro)
+              procesados_exito += 1
+            else:
+              st.warning(
+                  f"La IA no devolvió estructura en: {archivo_item.name}"
+              )
+          except Exception as ex:
+            st.error(f"Error en {archivo_item.name}: {ex}")
+
+          barra_progreso.progress((i + 1) / total_archivos)
+
+        if procesados_exito > 0:
+          st.success(
+              f"¡Bloque procesado! Se añadieron {procesados_exito} registros."
+          )
+          st.rerun()
 
   st.divider()
 
