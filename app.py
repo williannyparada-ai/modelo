@@ -1,6 +1,7 @@
 from datetime import datetime
 import io
 import json
+import time  # <-- Importante para la pausa entre peticiones
 from urllib.parse import quote
 import google.generativeai as genai
 from PIL import Image, ImageDraw, ImageFont
@@ -128,7 +129,7 @@ def procesar_planilla_con_ia(archivo):
     return None
 
 
-# --- FUNCIÓN DE LECTURA EN LOTE (MEJORADA Y ROBUSTA) ---
+# --- FUNCIÓN DE LECTURA EN LOTE (CON PAUSA ANTI-SATURACIÓN) ---
 def procesar_bytes_planilla_con_ia(img_bytes):
   try:
     imagen_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
@@ -239,6 +240,10 @@ with st.sidebar:
         try:
           img_bytes = archivo_item.getvalue()
           res_json = procesar_bytes_planilla_con_ia(img_bytes)
+
+          # Pausa de 1 segundo para evitar saturar la API gratuita
+          time.sleep(1)
+
           if res_json:
             cabe_lote = res_json.get("cabecera", {})
             items_lote = res_json.get("items", {})
@@ -277,7 +282,8 @@ with st.sidebar:
 
       if procesados_exito > 0:
         st.success(
-            f"¡Lote procesado! Se añadieron {procesados_exito} registros."
+            f"¡Lote procesado! Se añadieron {procesados_exito} de"
+            f" {total_archivos} registros."
         )
         st.rerun()
       else:
