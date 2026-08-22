@@ -217,7 +217,6 @@ with st.sidebar:
         "Subir múltiples fotos",
         type=["jpg", "png", "jpeg"],
         accept_multiple_files=True,
-        key="uploader_lote",
     )
     if archivos_lote and st.button("🤖 PROCESAR LOTE"):
       barra_progreso = st.progress(0)
@@ -226,10 +225,12 @@ with st.sidebar:
 
       for i, archivo_item in enumerate(archivos_lote):
         try:
-          # Lectura robusta de los bytes del archivo subido en lote
-          img_bytes = archivo_item.getvalue()
-          res_json = procesar_bytes_planilla_con_ia(img_bytes)
+          imagen_pil = Image.open(archivo_item)
+          img_byte_arr = io.BytesIO()
+          imagen_pil.save(img_byte_arr, format="JPEG")
+          img_bytes = img_byte_arr.getvalue()
 
+          res_json = procesar_bytes_planilla_con_ia(img_bytes)
           if res_json:
             cabe_lote = res_json.get("cabecera", {})
             items_lote = res_json.get("items", {})
@@ -244,11 +245,9 @@ with st.sidebar:
               vals_lote[nombres_items[idx_item]] = val_L
 
             nuevo_registro = {
-                "Estado": "",
+                "Estado": "",  # Se deja vacío si no viene explícito para rellenar después
                 "Fecha": datetime.now().strftime("%Y-%m-%d"),
-                "Contrato": cabe_llet.get("contrato", "")
-                if "cabe_llet" in locals()
-                else cabe_lote.get("contrato", ""),
+                "Contrato": cabe_lote.get("contrato", ""),
                 "Maíz": "MBI",
                 "COD MAIZ SAP": "MBI(12202968)",
                 "Analista": cabe_lote.get("analista", "Automático"),
@@ -262,26 +261,15 @@ with st.sidebar:
                 **vals_lote,
                 "Estatus": "Aprobado",
             }
-            # ACUMULACIÓN CORRECTA EN EL HISTÓRICO
             st.session_state.historico.append(nuevo_registro)
             procesados_exito += 1
-        except Exception as ex:
-          print(f"Error procesando archivo de lote: {ex}")
+        except Exception:
           pass
 
         barra_progreso.progress((i + 1) / total_archivos)
 
-      if procesados_exito > 0:
-        st.success(
-            f"¡Lote procesado con éxito! Se añadieron {procesados_exito}"
-            " registros al acumulado."
-        )
-        st.rerun()
-      else:
-        st.error(
-            "No se pudieron procesar las imágenes del lote. Verifica la"
-            " conexión o el formato."
-        )
+      st.success(f"¡Lote procesado! Se añadieron {procesados_exito} registros.")
+      st.rerun()
 
   st.divider()
 
@@ -405,7 +393,7 @@ if st.session_state.historico:
 else:
   st.info("Aún no hay datos para generar el reporte.")
 
-# --- 4. EXCEL MULTI-HOJA Y REPORTE VISUAL ---
+# --- 4. EXCEL MULTI-HOJA (DETALLE Y RESUMEN TIPO TABLA DINÁMICA) Y REPORTE VISUAL ---
 if st.session_state.historico:
   st.divider()
 
@@ -413,8 +401,10 @@ if st.session_state.historico:
   buffer_xls = io.BytesIO()
 
   with pd.ExcelWriter(buffer_xls, engine="xlsxwriter") as writer:
+    # 1. Hoja de Detalle con todos los registros
     df.to_excel(writer, sheet_name="Detalle", index=False)
 
+    # 2. Hoja de Resumen / Tabla Dinámica (Promedios agrupados por Estado, Fecha, Contrato, Maíz y Procedencia)
     columnas_agrupacion = [
         col
         for col in ["Estado", "Fecha", "Contrato", "Maíz", "Procedencia"]
@@ -422,7 +412,10 @@ if st.session_state.historico:
     ]
 
     if columnas_agrupacion:
-      agregaciones = {"Placa": "count"}
+      # Preparamos el diccionario de agregación: Conteo de placa para vehículos y promedio para el resto numérico
+      agregaciones = {
+          "Placa": "count"
+      }  # Usamos Placa para contar los vehículos analizados
       for col in nombres_items:
         if col in df.columns:
           agregaciones[col] = "mean"
@@ -435,6 +428,7 @@ if st.session_state.historico:
       )
       df_resumen = df_resumen.reset_index()
 
+      # Escribimos la segunda hoja en el Excel
       df_resumen.to_excel(writer, sheet_name="Resumen_Diario", index=False)
 
   st.download_button(
