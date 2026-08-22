@@ -35,7 +35,7 @@ nombres_items = [
     "Fumonisina",
 ]
 
-# Inicialización de estado
+# Inicialización de estado para acumulación persistente
 if "historico" not in st.session_state:
   st.session_state.historico = []
 if "datos_ia" not in st.session_state:
@@ -115,7 +115,7 @@ def procesar_planilla_con_ia(archivo):
     img_bytes = img_byte_arr.getvalue()
 
     prompt = """Analiza la planilla y extrae los datos. Devuelve un JSON sin formato Markdown.
-      Formato: {"cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "documento": ""},
+      Formato: {"cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "documento": "", "estado": ""},
       "items": {"01": 0.0, "02": 0.0, "03": 0.0, "04": 0.0, "05": 0.0, "06": 0.0, "07": 0.0, "08": 0.0, "09": 0.0, "10": 0.0, "11": 0.0, "12": 0.0, "13": 0.0, "14": 0.0, "15": 0.0, "16": 0.0, "17": 0.0, "18": 0.0, "19": 0.0, "20": 0.0}}"""
 
     response = model.generate_content(
@@ -137,10 +137,10 @@ def procesar_bytes_planilla_con_ia(img_bytes):
     imagen_pil.save(img_byte_arr, format="JPEG")
     img_bytes_limpios = img_byte_arr.getvalue()
 
-    prompt = """Analiza la imagen de esta planilla de laboratorio agroindustrial. Extrae la información disponible de los campos de cabecera y los 20 ítems numéricos de laboratorio. 
+    prompt = """Analiza la imagen de esta planilla de laboratorio agroindustrial. Extrae la información disponible de los campos de cabecera (incluyendo 'estado' si aparece geográficamente) y los 20 ítems numéricos de laboratorio. 
     Devuelve ÚNICAMENTE un objeto JSON válido sin bloques de código ni texto adicional, respetando exactamente esta estructura:
     {
-      "cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "documento": ""},
+      "cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "documento": "", "estado": ""},
       "items": {"01": 0.0, "02": 0.0, "03": 0.0, "04": 0.0, "05": 0.0, "06": 0.0, "07": 0.0, "08": 0.0, "09": 0.0, "10": 0.0, "11": 0.0, "12": 0.0, "13": 0.0, "14": 0.0, "15": 0.0, "16": 0.0, "17": 0.0, "18": 0.0, "19": 0.0, "20": 0.0}
     }"""
 
@@ -167,10 +167,10 @@ if st.session_state.historico:
       df_hist["Fecha"] + " " + datetime.now().strftime("%H:%M:%S")
   )
 
-  st.subheader("📊 Resumen de Jornada")
+  st.subheader("📊 Resumen de Jornada Acumulado")
 
   m1, m2, m3, m4 = st.columns(4)
-  m1.metric("Total Analizado", len(df_hist))
+  m1.metric("Total Acumulado", len(df_hist))
   m2.metric("✅ Aprobados", len(df_hist[df_hist["Estatus"] == "Aprobado"]))
   m3.metric("❌ Rechazados", len(df_hist[df_hist["Estatus"] == "Rechazado"]))
 
@@ -187,7 +187,7 @@ if st.session_state.historico:
   st.write("")
 
   with st.expander(
-      "📈 Ver Gráficos de Tendencia (vs. Registro #)", expanded=False
+      "📈 Ver Gráficos de Tendencia (Acumulado de la Jornada)", expanded=False
   ):
     c1, c2 = st.columns(2)
 
@@ -213,9 +213,9 @@ if st.session_state.historico:
 
 # --- 2. SIDEBAR ---
 with st.sidebar:
-  st.header("📸 Escáner")
+  st.header("📸 Escáner por Lotes")
 
-  modo_carga = st.radio("Modo de escaneo:", ["Individual", "Bloque de 5"])
+  modo_carga = st.radio("Modo de escaneo:", ["Individual", "Lote de Fotos"])
 
   if modo_carga == "Individual":
     archivo = st.file_uploader("Subir foto", type=["jpg", "png", "jpeg"])
@@ -226,32 +226,37 @@ with st.sidebar:
           st.session_state.datos_ia = resultado
           st.rerun()
   else:
-    st.info("Sube hasta 40 fotos y procesa de 5 en 5 sin saturar la API.")
+    st.info(
+        "Sube tus lotes progresivamente (ej. 5 fotos, luego 10 más). Se"
+        " acumularán automáticamente."
+    )
     archivos_lote = st.file_uploader(
-        "Subir fotos de los vehículos",
+        "Subir fotos de vehículos",
         type=["jpg", "png", "jpeg"],
         accept_multiple_files=True,
+        key="uploader_lotes",
     )
 
     if archivos_lote:
-      total_subidos = len(archivos_lote)
-      st.caption(f"📁 Total cargadas en memoria: {total_subidos} fotos.")
+      total_cargados = len(archivos_lote)
+      st.caption(
+          f"📁 Archivos cargados en este selector: {total_cargados} fotos."
+      )
 
-      # Botón para procesar solo el siguiente bloque de 5
-      if st.button("🤖 PROCESAR SIGUIENTE BLOQUE (5)"):
-        # Tomamos los primeros 5 archivos de la lista actual
-        lote_actual = archivos_lote[:5]
+      # Botón para procesar el lote completo actual o en bloques de 5 para cuidar cuota
+      if st.button("🤖 PROCESAR LOTE CARGADO (Bloques de 5 recomendados)"):
+        # Procesamos hasta 5 por ejecución para cuidar la cuota gratuita, o todos si prefieres
+        lote_a_procesar = archivos_lote[:5]
         barra_progreso = st.progress(0)
-        total_archivos = len(lote_actual)
+        total_archivos = len(lote_a_procesar)
         procesados_exito = 0
 
-        for i, archivo_item in enumerate(lote_actual):
+        for i, archivo_item in enumerate(lote_a_procesar):
           try:
             img_bytes = archivo_item.getvalue()
             res_json = procesar_bytes_planilla_con_ia(img_bytes)
 
-            # Pausa breve de 3 segundos entre cada una del bloque de 5
-            time.sleep(3)
+            time.sleep(3)  # Pausa prudente anti-saturación
 
             if res_json:
               cabe_lote = res_json.get("cabecera", {})
@@ -267,19 +272,24 @@ with st.sidebar:
                 vals_lote[nombres_items[idx_item]] = val_L
 
               nuevo_registro = {
+                  "Estado": cabe_lote.get("estado", ""),
                   "Fecha": datetime.now().strftime("%Y-%m-%d"),
+                  "Contrato": cabe_lote.get("contrato", "0"),
+                  "Maíz": "MBI",
+                  "COD MAIZ SAP": "MBI(12202968)",
+                  "N° Vehículos Analizados": 1,
+                  "Centros Externos": cabe_lote.get("procedencia", "PROVECESA"),
                   "Analista": cabe_lote.get("analista", "Automático"),
-                  "Procedencia": cabe_lote.get("procedencia", "N/D"),
                   "Placa": cabe_lote.get("placa", "N/D"),
                   "Silo": cabe_lote.get("silo", "N/D"),
                   "Destino": cabe_lote.get("destino", "N/D"),
-                  "Contrato": cabe_lote.get("contrato", "N/D"),
                   "Documento": cabe_lote.get("documento", "N/D"),
                   "Cereal": "Maíz Blanco",
                   "Origen": "Nacional",
                   **vals_lote,
                   "Estatus": "Aprobado",
               }
+              # Se acumula al histórico existente sin borrar lo anterior
               st.session_state.historico.append(nuevo_registro)
               procesados_exito += 1
             else:
@@ -293,17 +303,19 @@ with st.sidebar:
 
         if procesados_exito > 0:
           st.success(
-              f"¡Bloque procesado! Se añadieron {procesados_exito} registros."
+              f"¡Lote procesado con éxito! Se acumularon {procesados_exito}"
+              f" registros. Total acumulado en jornada:"
+              f" {len(st.session_state.historico)}"
           )
           st.rerun()
 
   st.divider()
 
   st.subheader("🗑️ Gestión de Jornada")
-  if st.button("🧹 Limpiar Registro Actual"):
+  if st.button("🧹 Limpiar Registro Actual (Borrar Acumulado)"):
     st.session_state.historico = []
     st.session_state.datos_ia = {}
-    st.success("¡Registro limpiado con éxito!")
+    st.success("¡Registro acumulado limpiado con éxito!")
     st.rerun()
 
 # --- 3. FORMULARIO ---
@@ -314,22 +326,16 @@ items = d.get("items", {})
 with st.form("registro_maestro"):
   st.subheader("📋 Datos del Encabezado")
   c1, c2, c3, c4 = st.columns(4)
-  f_fecha = c1.date_input("Fecha", datetime.now())
-  f_analista = c2.text_input("Analista", value=cabe.get("analista", ""))
-  f_procedencia = c3.text_input(
-      "Procedencia", value=cabe.get("procedencia", "")
-  )
-  f_placa = c4.text_input("Placa", value=cabe.get("placa", ""))
+  f_estado = c1.text_input("Estado", value=cabe.get("estado", ""))
+  f_fecha = c2.date_input("Fecha", datetime.now())
+  f_contrato = c3.text_input("Contrato", value=cabe.get("contrato", ""))
+  f_procedencia = c4.text_input("Centros Externos", value=cabe.get("procedencia", ""))
 
   c5, c6, c7, c8 = st.columns(4)
-  f_silo = c5.text_input("Silo", value=cabe.get("silo", ""))
-  f_destino = c6.text_input("Destino", value=cabe.get("destino", ""))
-  f_contrato = c7.text_input("Contrato", value=cabe.get("contrato", ""))
+  f_analista = c5.text_input("Analista", value=cabe.get("analista", ""))
+  f_placa = c6.text_input("Placa", value=cabe.get("placa", ""))
+  f_silo = c7.text_input("Silo", value=cabe.get("silo", ""))
   f_doc = c8.text_input("Documento", value=cabe.get("documento", ""))
-
-  c9, c10 = st.columns(2)
-  f_cereal = c9.selectbox("Cereal", ["Maíz Blanco", "Maíz Amarillo"])
-  f_origen = c10.selectbox("Origen", ["Nacional", "Importado"])
 
   st.subheader("🔬 Resultados de Laboratorio")
   cols = st.columns(5)
@@ -350,20 +356,25 @@ with st.form("registro_maestro"):
 
   f_estatus = st.radio("Estatus:", ["Aprobado", "Rechazado"], horizontal=True)
 
-  submit = st.form_submit_button("✅ REGISTRAR Y GENERAR EXCEL")
+  submit = st.form_submit_button(
+      "✅ REGISTRAR Y ACUMULAR EN REPORTE GENERAL"
+  )
 
   if submit:
     nuevo = {
+        "Estado": f_estado,
         "Fecha": f_fecha.strftime("%Y-%m-%d"),
+        "Contrato": f_contrato,
+        "Maíz": "MBI",
+        "COD MAIZ SAP": "MBI(12202968)",
+        "N° Vehículos Analizados": 1,
+        "Centros Externos": f_procedencia,
         "Analista": f_analista,
-        "Procedencia": f_procedencia,
         "Placa": f_placa,
         "Silo": f_silo,
-        "Destino": f_destino,
-        "Contrato": f_contrato,
         "Documento": f_doc,
-        "Cereal": f_cereal,
-        "Origen": f_origen,
+        "Cereal": "Maíz Blanco",
+        "Origen": "Nacional",
         **vals_registro,
         "Estatus": f_estatus,
     }
@@ -381,7 +392,7 @@ if st.session_state.historico:
     reporte = "📋 *REPORTE DIARIO DE RECEPCIÓN*\n"
     reporte += "========================================\n"
     reporte += f"📅 FECHA: {datetime.now().strftime('%d/%m/%Y')}\n"
-    reporte += f"🚚 VEHÍCULOS: {len(df)}\n"
+    reporte += f"🚚 VEHÍCULOS ACUMULADOS: {len(df)}\n"
     reporte += "========================================\n\n"
 
     campos = [
@@ -397,7 +408,7 @@ if st.session_state.historico:
         ("Fumonisina", "Fumonisina"),
     ]
 
-    reporte += "📊 *RESULTADOS PROMEDIOS:*\n"
+    reporte += "📊 *RESULTADOS PROMEDIOS ACUMULADOS:*\n"
     reporte += "----------------------------------------\n"
     for key, label in campos:
       valor = promedios.get(key, 0.0)
@@ -416,25 +427,67 @@ if st.session_state.historico:
   st.link_button("🚀 Enviar por WhatsApp", url=link_wa)
 
 else:
-  st.info("Aún no hay datos para generar el reporte.")
+  st.info("Aún no hay datos acumulados para generar el reporte.")
 
-# --- 4. EXCEL Y REPORTE VISUAL ---
+# --- 4. EXCEL MULTI-HOJA Y REPORTE VISUAL ---
 if st.session_state.historico:
   st.divider()
 
   df = pd.DataFrame(st.session_state.historico)
   buffer_xls = io.BytesIO()
+
   with pd.ExcelWriter(buffer_xls, engine="xlsxwriter") as writer:
-    df.to_excel(writer, index=False)
+    # 1. Hoja de Detalle (Acumulado de todos los vehículos)
+    df.to_excel(writer, sheet_name="Detalle", index=False)
+
+    # 2. Hoja de Resumen por Día y Estado (Tabla dinámica agrupada)
+    if not df.empty:
+      columnas_numericas = [col for col in nombres_items if col in df.columns]
+
+      agrupacion_cols = [
+          "Estado",
+          "Fecha",
+          "Contrato",
+          "Maíz",
+          "COD MAIZ SAP",
+          "Centros Externos",
+      ]
+
+      df_resumen = (
+          df.groupby(agrupacion_cols, dropna=False)
+          .agg(
+              {
+                  **{col: "mean" for col in columnas_numericas},
+                  "N° Vehículos Analizados": "sum",
+              }
+          )
+          .reset_index()
+      )
+
+      cols_ordenadas = [
+          "Estado",
+          "Fecha",
+          "Contrato",
+          "Maíz",
+          "COD MAIZ SAP",
+          "N° Vehículos Analizados",
+          "Centros Externos",
+      ] + columnas_numericas
+      df_resumen = df_resumen[
+          [c for c in cols_ordenadas if c in df_resumen.columns]
+      ]
+
+      df_resumen.to_excel(writer, sheet_name="Resumen por Día", index=False)
+
   st.download_button(
-      "📥 Descargar Reporte Excel",
+      "📥 Descargar Reporte Excel Acumulado",
       buffer_xls.getvalue(),
-      "Reporte.xlsx",
+      "Reporte_General_Acumulado.xlsx",
       "application/vnd.ms-excel",
   )
 
   st.subheader("🖼️ Reporte Visual Profesional")
-  if st.button("🎨 Generar Infografía"):
+  if st.button("🎨 Generar Infografía Acumulada"):
     with st.spinner("Diseñando reporte..."):
       img_bytes = generar_reporte_infografia(
           pd.DataFrame(st.session_state.historico)
@@ -447,4 +500,4 @@ if st.session_state.historico:
           mime="image/png",
       )
 else:
-  st.info("Aún no hay datos para generar reportes.")
+  st.info("Aún no hay datos acumulados para generar reportes.")
