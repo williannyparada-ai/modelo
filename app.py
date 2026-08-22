@@ -1,7 +1,7 @@
 from datetime import datetime
 import io
 import json
-import time  # <-- Importante para la pausa entre peticiones
+import time  # Pausa anti-saturación
 from urllib.parse import quote
 import google.generativeai as genai
 from PIL import Image, ImageDraw, ImageFont
@@ -129,7 +129,7 @@ def procesar_planilla_con_ia(archivo):
     return None
 
 
-# --- FUNCIÓN DE LECTURA EN LOTE (CON PAUSA ANTI-SATURACIÓN) ---
+# --- FUNCIÓN DE LECTURA EN LOTE (CON PAUSA Y MANEJO DE ERRORES) ---
 def procesar_bytes_planilla_con_ia(img_bytes):
   try:
     imagen_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
@@ -157,7 +157,7 @@ def procesar_bytes_planilla_con_ia(img_bytes):
       return json.loads(texto[inicio:fin])
     return None
   except Exception as e:
-    return None
+    raise e  # Propagamos el error exacto para depurar
 
 
 # --- 1. RESUMEN DE JORNADA Y TENDENCIAS ---
@@ -241,8 +241,8 @@ with st.sidebar:
           img_bytes = archivo_item.getvalue()
           res_json = procesar_bytes_planilla_con_ia(img_bytes)
 
-          # Pausa de 1 segundo para evitar saturar la API gratuita
-          time.sleep(1)
+          # Pausa de 4 segundos para evitar saturar el límite de solicitudes por minuto (RPM)
+          time.sleep(4)
 
           if res_json:
             cabe_lote = res_json.get("cabecera", {})
@@ -274,9 +274,11 @@ with st.sidebar:
             st.session_state.historico.append(nuevo_registro)
             procesados_exito += 1
           else:
-            st.warning(f"Sin datos en: {archivo_item.name}")
+            st.warning(
+                f"La IA no devolvió estructura en: {archivo_item.name}"
+            )
         except Exception as ex:
-          st.error(f"Error en {archivo_item.name}: {ex}")
+          st.error(f"Error crítico en {archivo_item.name}: {ex}")
 
         barra_progreso.progress((i + 1) / total_archivos)
 
@@ -287,7 +289,10 @@ with st.sidebar:
         )
         st.rerun()
       else:
-        st.error("No se pudo procesar ningún archivo. Revisa los errores.")
+        st.error(
+            "No se pudo procesar ningún archivo. Revisa si apareció un error"
+            " de cuota (429)."
+        )
 
   st.divider()
 
