@@ -133,7 +133,7 @@ def procesar_planilla_con_ia(archivo):
     return None
 
 
-# --- FUNCIÓN DE LECTURA EN LOTE (NUEVA) ---
+# --- FUNCIÓN DE LECTURA EN LOTE ---
 def procesar_bytes_planilla_con_ia(img_bytes):
   prompt = """Analiza la planilla y extrae los datos. Devuelve un JSON sin formato Markdown estricto.
     Formato requerido: 
@@ -203,11 +203,10 @@ if st.session_state.historico:
 
   st.divider()
 
-# --- 2. SIDEBAR (CON CARGA EN LOTE Y MODO INDIVIDUAL) ---
+# --- 2. SIDEBAR (CON CARGA EN LOTE, MODO INDIVIDUAL Y BOTÓN DE LIMPIEZA) ---
 with st.sidebar:
   st.header("📸 Escáner")
 
-  # Pestañas en el sidebar para elegir entre 1 sola foto o un lote completo
   modo_carga = st.radio("Modo de escaneo:", ["Individual", "Carga en Lote"])
 
   if modo_carga == "Individual":
@@ -274,6 +273,16 @@ with st.sidebar:
       st.success(f"¡Lote procesado! Se añadieron {procesados_exito} registros.")
       st.rerun()
 
+  st.divider()
+
+  # --- NUEVO: BOTÓN PARA LIMPIAR EL REGISTRO HISTÓRICO MANUALMENTE ---
+  st.subheader("🗑️ Gestión de Jornada")
+  if st.button("🧹 Limpiar Registro Actual"):
+    st.session_state.historico = []
+    st.session_state.datos_ia = {}
+    st.success("¡Registro limpiado con éxito!")
+    st.rerun()
+
 # --- 3. FORMULARIO ---
 d = st.session_state.get("datos_ia", {})
 cabe = d.get("cabecera", {})
@@ -339,7 +348,7 @@ with st.form("registro_maestro"):
     st.session_state.datos_ia = {}
     st.rerun()
 
-# --- NUEVA SECCIÓN: REPORTE PARA WHATSAPP ---
+# --- REPORTE PARA WHATSAPP ---
 st.subheader("📱 Reporte para WhatsApp")
 
 if st.session_state.historico:
