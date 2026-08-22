@@ -218,7 +218,7 @@ with st.sidebar:
         if resultado:
           st.session_state.datos_ia = resultado
           st.rerun()
-  else:
+else:
     archivos_lote = st.file_uploader(
         "Subir múltiples fotos",
         type=["jpg", "png", "jpeg"],
@@ -231,11 +231,7 @@ with st.sidebar:
 
       for i, archivo_item in enumerate(archivos_lote):
         try:
-          imagen_pil = Image.open(archivo_item)
-          img_byte_arr = io.BytesIO()
-          imagen_pil.save(img_byte_arr, format="JPEG")
-          img_bytes = img_byte_arr.getvalue()
-
+          img_bytes = archivo_item.getvalue()
           res_json = procesar_bytes_planilla_con_ia(img_bytes)
           if res_json:
             cabe_lote = res_json.get("cabecera", {})
@@ -266,13 +262,25 @@ with st.sidebar:
             }
             st.session_state.historico.append(nuevo_registro)
             procesados_exito += 1
-        except Exception:
-          pass
+          else:
+            st.warning(
+                f"La IA no devolvió datos para el archivo: {archivo_item.name}"
+            )
+        except Exception as ex:
+          st.error(f"Error en archivo {archivo_item.name}: {ex}")
 
         barra_progreso.progress((i + 1) / total_archivos)
 
-      st.success(f"¡Lote procesado! Se añadieron {procesados_exito} registros.")
-      st.rerun()
+      if procesados_exito > 0:
+        st.success(
+            f"¡Lote procesado! Se añadieron {procesados_exito} registros."
+        )
+        st.rerun()
+      else:
+        st.error(
+            "No se pudo procesar ningún archivo del lote. Revisa los errores"
+            " arriba."
+        )
 
 # --- 3. FORMULARIO ---
 d = st.session_state.get("datos_ia", {})
