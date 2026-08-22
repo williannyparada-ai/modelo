@@ -8,8 +8,54 @@ from PIL import Image, ImageDraw, ImageFont
 import pandas as pd
 import streamlit as st
 
-# --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Sistema Provencesa", layout="wide", page_icon="🌾")
+# --- CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(
+    page_title="Sistema Provencesa - Control de Calidad",
+    layout="wide",
+    page_icon="🌾",
+)
+
+# --- ESTILOS CSS PERSONALIZADOS (Estética Corporativa Profesional) ---
+st.markdown(
+    """
+    <style>
+        :root {
+            --primary-blue: #00467F;
+            --secondary-blue: #0066B3;
+            --bg-light: #F8F9FA;
+            --text-dark: #333333;
+            --border-color: #E0E0E0;
+        }
+        
+        /* Contenedores generales y métricas */
+        .kpi-container {
+            background-color: #FFFFFF;
+            border-left: 4px solid var(--secondary-blue);
+            padding: 15px;
+            border-radius: 6px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+        }
+
+        /* Encabezados de sección estilizados */
+        .section-header {
+            font-size: 18px;
+            color: var(--primary-blue);
+            border-bottom: 2px solid var(--primary-blue);
+            padding-bottom: 5px;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        /* Ajuste visual para botones principales */
+        .stButton>button {
+            border-radius: 6px;
+            font-weight: 600;
+        }
+    </style>
+""",
+    unsafe_allow_html=True,
+)
 
 # Etiquetas para resultados
 nombres_items = [
@@ -167,20 +213,23 @@ if st.session_state.historico:
       df_hist["Fecha"] + " " + datetime.now().strftime("%H:%M:%S")
   )
 
-  st.subheader("📊 Resumen de Jornada Acumulado")
+  st.markdown(
+      '<div class="section-header">📊 Resumen de Jornada Acumulado</div>',
+      unsafe_allow_html=True,
+  )
 
   m1, m2, m3, m4 = st.columns(4)
   m1.metric("Total Acumulado", len(df_hist))
   m2.metric("✅ Aprobados", len(df_hist[df_hist["Estatus"] == "Aprobado"]))
   m3.metric("❌ Rechazados", len(df_hist[df_hist["Estatus"] == "Rechazado"]))
+  m4.metric("💧 Prom. Humedad", f"{df_hist['Humedad'].mean():.2f} %")
 
-  col_prom1, col_prom2, col_prom3, col_prom4 = st.columns(4)
-  col_prom1.metric("💧 Prom. Humedad", f"{df_hist['Humedad'].mean():.2f} %")
-  col_prom2.metric("🌾 Prom. GDT", f"{df_hist['Total Dañados'].mean():.2f} %")
-  col_prom3.metric(
+  col_prom1, col_prom2, col_prom3 = st.columns(3)
+  col_prom1.metric("🌾 Prom. GDT", f"{df_hist['Total Dañados'].mean():.2f} %")
+  col_prom2.metric(
       "🍄 Prom. Aflatoxina", f"{df_hist['Aflatoxina'].mean():.2f} PPB"
   )
-  col_prom4.metric(
+  col_prom3.metric(
       "🧪 Prom. Fumonisina", f"{df_hist['Fumonisina'].mean():.2f} PPM"
   )
 
@@ -243,9 +292,7 @@ with st.sidebar:
           f"📁 Archivos cargados en este selector: {total_cargados} fotos."
       )
 
-      # Botón para procesar el lote completo actual o en bloques de 5 para cuidar cuota
       if st.button("🤖 PROCESAR LOTE CARGADO (Bloques de 5 recomendados)"):
-        # Procesamos hasta 5 por ejecución para cuidar la cuota gratuita, o todos si prefieres
         lote_a_procesar = archivos_lote[:5]
         barra_progreso = st.progress(0)
         total_archivos = len(lote_a_procesar)
@@ -289,7 +336,6 @@ with st.sidebar:
                   **vals_lote,
                   "Estatus": "Aprobado",
               }
-              # Se acumula al histórico existente sin borrar lo anterior
               st.session_state.historico.append(nuevo_registro)
               procesados_exito += 1
             else:
@@ -303,7 +349,7 @@ with st.sidebar:
 
         if procesados_exito > 0:
           st.success(
-              f"¡Lote procesado con éxito! Se acumularon {procesados_exito}"
+              f"¡Lote procesado con éxito! Se acumularán {procesados_exito}"
               f" registros. Total acumulado en jornada:"
               f" {len(st.session_state.historico)}"
           )
@@ -318,18 +364,24 @@ with st.sidebar:
     st.success("¡Registro acumulado limpiado con éxito!")
     st.rerun()
 
-# --- 3. FORMULARIO ---
+# --- 3. FORMULARIO PRINCIPAL ---
 d = st.session_state.get("datos_ia", {})
 cabe = d.get("cabecera", {})
 items = d.get("items", {})
 
 with st.form("registro_maestro"):
-  st.subheader("📋 Datos del Encabezado")
+  st.markdown(
+      '<div class="section-header">📋 Datos del Encabezado</div>',
+      unsafe_allow_html=True,
+  )
+
   c1, c2, c3, c4 = st.columns(4)
   f_estado = c1.text_input("Estado", value=cabe.get("estado", ""))
   f_fecha = c2.date_input("Fecha", datetime.now())
   f_contrato = c3.text_input("Contrato", value=cabe.get("contrato", ""))
-  f_procedencia = c4.text_input("Centros Externos", value=cabe.get("procedencia", ""))
+  f_procedencia = c4.text_input(
+      "Centros Externos", value=cabe.get("procedencia", "")
+  )
 
   c5, c6, c7, c8 = st.columns(4)
   f_analista = c5.text_input("Analista", value=cabe.get("analista", ""))
@@ -337,7 +389,11 @@ with st.form("registro_maestro"):
   f_silo = c7.text_input("Silo", value=cabe.get("silo", ""))
   f_doc = c8.text_input("Documento", value=cabe.get("documento", ""))
 
-  st.subheader("🔬 Resultados de Laboratorio")
+  st.markdown(
+      '<div class="section-header">🔬 Resultados de Laboratorio</div>',
+      unsafe_allow_html=True,
+  )
+
   cols = st.columns(5)
   vals_registro = {}
 
@@ -354,10 +410,11 @@ with st.form("registro_maestro"):
           f"{nombres_items[i]}", value=val_limpio, step=0.01
       )
 
+  st.write("")
   f_estatus = st.radio("Estatus:", ["Aprobado", "Rechazado"], horizontal=True)
 
   submit = st.form_submit_button(
-      "✅ REGISTRAR Y ACUMULAR EN REPORTE GENERAL"
+      "✅ REGISTRAR Y ACUMULAR EN REPORTE GENERAL", use_container_width=True
   )
 
   if submit:
@@ -383,7 +440,10 @@ with st.form("registro_maestro"):
     st.rerun()
 
 # --- REPORTE PARA WHATSAPP ---
-st.subheader("📱 Reporte para WhatsApp")
+st.markdown(
+    '<div class="section-header">📱 Reporte para WhatsApp</div>',
+    unsafe_allow_html=True,
+)
 
 if st.session_state.historico:
 
@@ -437,10 +497,8 @@ if st.session_state.historico:
   buffer_xls = io.BytesIO()
 
   with pd.ExcelWriter(buffer_xls, engine="xlsxwriter") as writer:
-    # 1. Hoja de Detalle (Acumulado de todos los vehículos)
     df.to_excel(writer, sheet_name="Detalle", index=False)
 
-    # 2. Hoja de Resumen por Día y Estado (Tabla dinámica agrupada)
     if not df.empty:
       columnas_numericas = [col for col in nombres_items if col in df.columns]
 
@@ -486,7 +544,10 @@ if st.session_state.historico:
       "application/vnd.ms-excel",
   )
 
-  st.subheader("🖼️ Reporte Visual Profesional")
+  st.markdown(
+      '<div class="section-header">🖼️ Reporte Visual Profesional</div>',
+      unsafe_allow_html=True,
+  )
   if st.button("🎨 Generar Infografía Acumulada"):
     with st.spinner("Diseñando reporte..."):
       img_bytes = generar_reporte_infografia(
