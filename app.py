@@ -217,6 +217,7 @@ with st.sidebar:
         "Subir múltiples fotos",
         type=["jpg", "png", "jpeg"],
         accept_multiple_files=True,
+        key="uploader_lote",
     )
     if archivos_lote and st.button("🤖 PROCESAR LOTE"):
       barra_progreso = st.progress(0)
@@ -225,12 +226,10 @@ with st.sidebar:
 
       for i, archivo_item in enumerate(archivos_lote):
         try:
-          imagen_pil = Image.open(archivo_item)
-          img_byte_arr = io.BytesIO()
-          imagen_pil.save(img_byte_arr, format="JPEG")
-          img_bytes = img_byte_arr.getvalue()
-
+          # Lectura robusta de los bytes del archivo subido en lote
+          img_bytes = archivo_item.getvalue()
           res_json = procesar_bytes_planilla_con_ia(img_bytes)
+
           if res_json:
             cabe_lote = res_json.get("cabecera", {})
             items_lote = res_json.get("items", {})
@@ -245,9 +244,11 @@ with st.sidebar:
               vals_lote[nombres_items[idx_item]] = val_L
 
             nuevo_registro = {
-                "Estado": "",  # Se deja vacío si no viene explícito
+                "Estado": "",
                 "Fecha": datetime.now().strftime("%Y-%m-%d"),
-                "Contrato": cabe_lote.get("contrato", ""),
+                "Contrato": cabe_llet.get("contrato", "")
+                if "cabe_llet" in locals()
+                else cabe_lote.get("contrato", ""),
                 "Maíz": "MBI",
                 "COD MAIZ SAP": "MBI(12202968)",
                 "Analista": cabe_lote.get("analista", "Automático"),
@@ -264,16 +265,23 @@ with st.sidebar:
             # ACUMULACIÓN CORRECTA EN EL HISTÓRICO
             st.session_state.historico.append(nuevo_registro)
             procesados_exito += 1
-        except Exception:
+        except Exception as ex:
+          print(f"Error procesando archivo de lote: {ex}")
           pass
 
         barra_progreso.progress((i + 1) / total_archivos)
 
-      st.success(
-          f"¡Lote procesado! Se añadieron {procesados_exito} registros al"
-          " acumulado."
-      )
-      st.rerun()
+      if procesados_exito > 0:
+        st.success(
+            f"¡Lote procesado con éxito! Se añadieron {procesados_exito}"
+            " registros al acumulado."
+        )
+        st.rerun()
+      else:
+        st.error(
+            "No se pudieron procesar las imágenes del lote. Verifica la"
+            " conexión o el formato."
+        )
 
   st.divider()
 
