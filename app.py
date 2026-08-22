@@ -61,11 +61,9 @@ except Exception as e:
 def generar_reporte_infografia(df):
   promedios = df.mean(numeric_only=True)
 
-  # 1. Crear lienzo blanco
   img = Image.new("RGB", (800, 1100), color=(255, 255, 255))
   draw = ImageDraw.Draw(img)
 
-  # 2. Cargar logo y ajustar proporciones
   try:
     logo = Image.open("modelo/EPC_cep_pd_2010-sn.webp")
     logo = logo.convert("RGBA")
@@ -79,7 +77,6 @@ def generar_reporte_infografia(df):
     draw.text((250, 50), "EMPRESAS POLAR", fill=(0, 70, 127))
     y_titulo = 200
 
-  # 3. Títulos
   draw.text((270, y_titulo), "REPORTE DIARIO DE RECEPCIÓN", fill=(0, 70, 127))
   draw.text(
       (320, y_titulo + 35),
@@ -87,7 +84,6 @@ def generar_reporte_infografia(df):
       fill=(100, 100, 100),
   )
 
-  # 4. Dibujar resultados
   y = y_titulo + 100
   x_etiqueta = 100
   x_valor = 600
@@ -100,7 +96,6 @@ def generar_reporte_infografia(df):
     if y > 1000:
       break
 
-  # Footer
   draw.text(
       (300, 1050), f"Vehículos analizados: {len(df)}", fill=(0, 70, 127)
   )
@@ -203,7 +198,7 @@ if st.session_state.historico:
 
   st.divider()
 
-# --- 2. SIDEBAR (CON CARGA EN LOTE, MODO INDIVIDUAL Y BOTÓN DE LIMPIEZA) ---
+# --- 2. SIDEBAR ---
 with st.sidebar:
   st.header("📸 Escáner")
 
@@ -230,11 +225,7 @@ with st.sidebar:
 
       for i, archivo_item in enumerate(archivos_lote):
         try:
-          imagen_pil = Image.open(archivo_item)
-          img_byte_arr = io.BytesIO()
-          imagen_pil.save(img_byte_arr, format="JPEG")
-          img_bytes = img_byte_arr.getvalue()
-
+          img_bytes = archivo_item.getvalue()
           res_json = procesar_bytes_planilla_con_ia(img_bytes)
           if res_json:
             cabe_lote = res_json.get("cabecera", {})
@@ -263,6 +254,7 @@ with st.sidebar:
                 **vals_lote,
                 "Estatus": "Aprobado",
             }
+            # ACUMULACIÓN CORRECTA EN EL HISTÓRICO
             st.session_state.historico.append(nuevo_registro)
             procesados_exito += 1
         except Exception:
@@ -270,12 +262,14 @@ with st.sidebar:
 
         barra_progreso.progress((i + 1) / total_archivos)
 
-      st.success(f"¡Lote procesado! Se añadieron {procesados_exito} registros.")
+      st.success(
+          f"¡Lote procesado! Se acumuló y se añadieron {procesados_exito}"
+          " registros con éxito."
+      )
       st.rerun()
 
   st.divider()
 
-  # --- NUEVO: BOTÓN PARA LIMPIAR EL REGISTRO HISTÓRICO MANUALMENTE ---
   st.subheader("🗑️ Gestión de Jornada")
   if st.button("🧹 Limpiar Registro Actual"):
     st.session_state.historico = []
