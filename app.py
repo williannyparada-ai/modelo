@@ -61,11 +61,9 @@ except Exception as e:
 def generar_reporte_infografia(df):
   promedios = df.mean(numeric_only=True)
 
-  # 1. Crear lienzo blanco
   img = Image.new("RGB", (800, 1100), color=(255, 255, 255))
   draw = ImageDraw.Draw(img)
 
-  # 2. Cargar logo y ajustar proporciones
   try:
     logo = Image.open("modelo/EPC_cep_pd_2010-sn.webp")
     logo = logo.convert("RGBA")
@@ -79,7 +77,6 @@ def generar_reporte_infografia(df):
     draw.text((250, 50), "EMPRESAS POLAR", fill=(0, 70, 127))
     y_titulo = 200
 
-  # 3. Títulos
   draw.text((270, y_titulo), "REPORTE DIARIO DE RECEPCIÓN", fill=(0, 70, 127))
   draw.text(
       (320, y_titulo + 35),
@@ -87,7 +84,6 @@ def generar_reporte_infografia(df):
       fill=(100, 100, 100),
   )
 
-  # 4. Dibujar resultados
   y = y_titulo + 100
   x_etiqueta = 100
   x_valor = 600
@@ -100,7 +96,6 @@ def generar_reporte_infografia(df):
     if y > 1000:
       break
 
-  # Footer
   draw.text(
       (300, 1050), f"Vehículos analizados: {len(df)}", fill=(0, 70, 127)
   )
@@ -203,7 +198,7 @@ if st.session_state.historico:
 
   st.divider()
 
-# --- 2. SIDEBAR (CON CARGA EN LOTE, MODO INDIVIDUAL Y BOTÓN DE LIMPIEZA) ---
+# --- 2. SIDEBAR ---
 with st.sidebar:
   st.header("📸 Escáner")
 
@@ -250,13 +245,16 @@ with st.sidebar:
               vals_lote[nombres_items[idx_item]] = val_L
 
             nuevo_registro = {
+                "Estado": "",  # Se deja vacío si no viene explícito para rellenar después
                 "Fecha": datetime.now().strftime("%Y-%m-%d"),
+                "Contrato": cabe_lote.get("contrato", ""),
+                "Maíz": "MBI",
+                "COD MAIZ SAP": "MBI(12202968)",
                 "Analista": cabe_lote.get("analista", "Automático"),
                 "Procedencia": cabe_lote.get("procedencia", "N/D"),
                 "Placa": cabe_lote.get("placa", "N/D"),
                 "Silo": cabe_lote.get("silo", "N/D"),
                 "Destino": cabe_lote.get("destino", "N/D"),
-                "Contrato": cabe_lote.get("contrato", "N/D"),
                 "Documento": cabe_lote.get("documento", "N/D"),
                 "Cereal": "Maíz Blanco",
                 "Origen": "Nacional",
@@ -275,7 +273,6 @@ with st.sidebar:
 
   st.divider()
 
-  # --- NUEVO: BOTÓN PARA LIMPIAR EL REGISTRO HISTÓRICO MANUALMENTE ---
   st.subheader("🗑️ Gestión de Jornada")
   if st.button("🧹 Limpiar Registro Actual"):
     st.session_state.historico = []
@@ -291,18 +288,18 @@ items = d.get("items", {})
 with st.form("registro_maestro"):
   st.subheader("📋 Datos del Encabezado")
   c1, c2, c3, c4 = st.columns(4)
-  f_fecha = c1.date_input("Fecha", datetime.now())
-  f_analista = c2.text_input("Analista", value=cabe.get("analista", ""))
-  f_procedencia = c3.text_input(
-      "Procedencia", value=cabe.get("procedencia", "")
-  )
-  f_placa = c4.text_input("Placa", value=cabe.get("placa", ""))
+  f_estado = c1.text_input("Estado", value="")
+  f_fecha = c2.date_input("Fecha", datetime.now())
+  f_contrato = c3.text_input("Contrato", value=cabe.get("contrato", ""))
+  f_analista = c4.text_input("Analista", value=cabe.get("analista", ""))
 
   c5, c6, c7, c8 = st.columns(4)
-  f_silo = c5.text_input("Silo", value=cabe.get("silo", ""))
-  f_destino = c6.text_input("Destino", value=cabe.get("destino", ""))
-  f_contrato = c7.text_input("Contrato", value=cabe.get("contrato", ""))
-  f_doc = c8.text_input("Documento", value=cabe.get("documento", ""))
+  f_procedencia = c5.text_input(
+      "Procedencia (Centro)", value=cabe.get("procedencia", "")
+  )
+  f_placa = c6.text_input("Placa", value=cabe.get("placa", ""))
+  f_silo = c7.text_input("Silo", value=cabe.get("silo", ""))
+  f_destino = c8.text_input("Destino", value=cabe.get("destino", ""))
 
   c9, c10 = st.columns(2)
   f_cereal = c9.selectbox("Cereal", ["Maíz Blanco", "Maíz Amarillo"])
@@ -331,14 +328,16 @@ with st.form("registro_maestro"):
 
   if submit:
     nuevo = {
+        "Estado": f_estado,
         "Fecha": f_fecha.strftime("%Y-%m-%d"),
+        "Contrato": f_contrato,
+        "Maíz": "MBI" if "Blanco" in f_cereal else "MAI",
+        "COD MAIZ SAP": "MBI(12202968)",
         "Analista": f_analista,
         "Procedencia": f_procedencia,
         "Placa": f_placa,
         "Silo": f_silo,
         "Destino": f_destino,
-        "Contrato": f_contrato,
-        "Documento": f_doc,
         "Cereal": f_cereal,
         "Origen": f_origen,
         **vals_registro,
@@ -370,7 +369,6 @@ if st.session_state.historico:
         ("Peso Vol", "Peso Específico"),
         ("Insectos V.", "Insectos Vivos"),
         ("Aflatoxina", "Aflatoxinas Totales"),
-        ("Granos Part. Peq.", "Granos Partidos Pequeños"),
         ("Fumonisina", "Fumonisina"),
     ]
 
@@ -395,18 +393,48 @@ if st.session_state.historico:
 else:
   st.info("Aún no hay datos para generar el reporte.")
 
-# --- 4. EXCEL Y REPORTE VISUAL ---
+# --- 4. EXCEL MULTI-HOJA (DETALLE Y RESUMEN TIPO TABLA DINÁMICA) Y REPORTE VISUAL ---
 if st.session_state.historico:
   st.divider()
 
   df = pd.DataFrame(st.session_state.historico)
   buffer_xls = io.BytesIO()
+
   with pd.ExcelWriter(buffer_xls, engine="xlsxwriter") as writer:
-    df.to_excel(writer, index=False)
+    # 1. Hoja de Detalle con todos los registros
+    df.to_excel(writer, sheet_name="Detalle", index=False)
+
+    # 2. Hoja de Resumen / Tabla Dinámica (Promedios agrupados por Estado, Fecha, Contrato, Maíz y Procedencia)
+    columnas_agrupacion = [
+        col
+        for col in ["Estado", "Fecha", "Contrato", "Maíz", "Procedencia"]
+        if col in df.columns
+    ]
+
+    if columnas_agrupacion:
+      # Preparamos el diccionario de agregación: Conteo de placa para vehículos y promedio para el resto numérico
+      agregaciones = {
+          "Placa": "count"
+      }  # Usamos Placa para contar los vehículos analizados
+      for col in nombres_items:
+        if col in df.columns:
+          agregaciones[col] = "mean"
+
+      df_resumen = df.groupby(columnas_agrupacion, dropna=False).agg(
+          agregaciones
+      )
+      df_resumen = df_resumen.rename(
+          columns={"Placa": "N° Vehículos Analizados"}
+      )
+      df_resumen = df_resumen.reset_index()
+
+      # Escribimos la segunda hoja en el Excel
+      df_resumen.to_excel(writer, sheet_name="Resumen_Diario", index=False)
+
   st.download_button(
-      "📥 Descargar Reporte Excel",
+      "📥 Descargar Reporte Excel (Multi-hoja)",
       buffer_xls.getvalue(),
-      "Reporte.xlsx",
+      "Reporte_General.xlsx",
       "application/vnd.ms-excel",
   )
 
