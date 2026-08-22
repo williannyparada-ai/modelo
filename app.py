@@ -34,7 +34,7 @@ nombres_items = [
     "Fumonisina",
 ]
 
-# Inicialización segura de estado acumulativo
+# Inicialización de estado
 if "historico" not in st.session_state:
   st.session_state.historico = []
 if "datos_ia" not in st.session_state:
@@ -154,9 +154,7 @@ if st.session_state.historico:
       df_hist["Fecha"] + " " + datetime.now().strftime("%H:%M:%S")
   )
 
-  st.subheader(
-      f"📊 Resumen de Jornada (Acumulado: {len(df_hist)} vehículos)"
-  )
+  st.subheader("📊 Resumen de Jornada")
 
   m1, m2, m3, m4 = st.columns(4)
   m1.metric("Total Analizado", len(df_hist))
@@ -213,17 +211,17 @@ with st.sidebar:
         resultado = procesar_planilla_con_ia(archivo)
         if resultado:
           st.session_state.datos_ia = resultado
-          st.success("¡Planilla leída con éxito! Revisa y guarda abajo.")
+          st.rerun()
   else:
     archivos_lote = st.file_uploader(
         "Subir múltiples fotos",
         type=["jpg", "png", "jpeg"],
         accept_multiple_files=True,
     )
-    if archivos_lote and st.button("🤖 PROCESAR LOTE ACUMULATIVO"):
+    if archivos_lote and st.button("🤖 PROCESAR LOTE"):
       barra_progreso = st.progress(0)
       total_archivos = len(archivos_lote)
-      nuevos_registros_lote = []
+      procesados_exito = 0
 
       for i, archivo_item in enumerate(archivos_lote):
         try:
@@ -247,7 +245,7 @@ with st.sidebar:
               vals_lote[nombres_items[idx_item]] = val_L
 
             nuevo_registro = {
-                "Estado": "",
+                "Estado": "",  # Se deja vacío si no viene explícito
                 "Fecha": datetime.now().strftime("%Y-%m-%d"),
                 "Contrato": cabe_lote.get("contrato", ""),
                 "Maíz": "MBI",
@@ -263,18 +261,17 @@ with st.sidebar:
                 **vals_lote,
                 "Estatus": "Aprobado",
             }
-            nuevos_registros_lote.append(nuevo_registro)
+            # ACUMULACIÓN CORRECTA EN EL HISTÓRICO
+            st.session_state.historico.append(nuevo_registro)
+            procesados_exito += 1
         except Exception:
           pass
 
         barra_progreso.progress((i + 1) / total_archivos)
 
-      # Acumulamos de forma segura al histórico existente sin borrar lo anterior
-      st.session_state.historico.extend(nuevos_registros_lote)
       st.success(
-          f"¡Lote procesado! Se acumularon {len(nuevos_registros_lote)}"
-          f" registros nuevos. Total acumulado:"
-          f" {len(st.session_state.historico)}"
+          f"¡Lote procesado! Se añadieron {procesados_exito} registros al"
+          " acumulado."
       )
       st.rerun()
 
@@ -331,7 +328,7 @@ with st.form("registro_maestro"):
 
   f_estatus = st.radio("Estatus:", ["Aprobado", "Rechazado"], horizontal=True)
 
-  submit = st.form_submit_button("✅ REGISTRAR Y ACUMULAR EN HISTÓRICO")
+  submit = st.form_submit_button("✅ REGISTRAR Y GENERAR EXCEL")
 
   if submit:
     nuevo = {
@@ -350,10 +347,8 @@ with st.form("registro_maestro"):
         **vals_registro,
         "Estatus": f_estatus,
     }
-    # Acumula de forma individual conservando el resto
     st.session_state.historico.append(nuevo)
     st.session_state.datos_ia = {}
-    st.success("¡Registro acumulado exitosamente!")
     st.rerun()
 
 # --- REPORTE PARA WHATSAPP ---
@@ -366,7 +361,7 @@ if st.session_state.historico:
     reporte = "📋 *REPORTE DIARIO DE RECEPCIÓN*\n"
     reporte += "========================================\n"
     reporte += f"📅 FECHA: {datetime.now().strftime('%d/%m/%Y')}\n"
-    reporte += f"🚚 VEHÍCULOS ACUMULADOS: {len(df)}\n"
+    reporte += f"🚚 VEHÍCULOS: {len(df)}\n"
     reporte += "========================================\n\n"
 
     campos = [
@@ -381,7 +376,7 @@ if st.session_state.historico:
         ("Fumonisina", "Fumonisina"),
     ]
 
-    reporte += "📊 *RESULTADOS PROMEDIOS ACUMULADOS:*\n"
+    reporte += "📊 *RESULTADOS PROMEDIOS:*\n"
     reporte += "----------------------------------------\n"
     for key, label in campos:
       valor = promedios.get(key, 0.0)
@@ -400,7 +395,7 @@ if st.session_state.historico:
   st.link_button("🚀 Enviar por WhatsApp", url=link_wa)
 
 else:
-  st.info("Aún no hay datos acumulados para generar el reporte.")
+  st.info("Aún no hay datos para generar el reporte.")
 
 # --- 4. EXCEL MULTI-HOJA Y REPORTE VISUAL ---
 if st.session_state.historico:
@@ -410,10 +405,8 @@ if st.session_state.historico:
   buffer_xls = io.BytesIO()
 
   with pd.ExcelWriter(buffer_xls, engine="xlsxwriter") as writer:
-    # 1. Hoja de Detalle acumulada
     df.to_excel(writer, sheet_name="Detalle", index=False)
 
-    # 2. Hoja de Resumen / Tabla Dinámica agrupando de forma acumulada
     columnas_agrupacion = [
         col
         for col in ["Estado", "Fecha", "Contrato", "Maíz", "Procedencia"]
@@ -437,9 +430,9 @@ if st.session_state.historico:
       df_resumen.to_excel(writer, sheet_name="Resumen_Diario", index=False)
 
   st.download_button(
-      "📥 Descargar Reporte Excel Acumulado",
+      "📥 Descargar Reporte Excel (Multi-hoja)",
       buffer_xls.getvalue(),
-      "Reporte_General_Acumulado.xlsx",
+      "Reporte_General.xlsx",
       "application/vnd.ms-excel",
   )
 
@@ -457,4 +450,4 @@ if st.session_state.historico:
           mime="image/png",
       )
 else:
-  st.info("Aún no hay datos acumulados para generar reportes.")
+  st.info("Aún no hay datos para generar reportes.")
