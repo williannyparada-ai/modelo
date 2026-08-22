@@ -27,13 +27,27 @@ st.markdown(
             --border-color: #E0E0E0;
         }
         
-        /* Contenedores generales y métricas */
-        .kpi-container {
-            background-color: #FFFFFF;
-            border-left: 4px solid var(--secondary-blue);
-            padding: 15px;
-            border-radius: 6px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+        /* Contenedor principal estilo tarjeta corporativa */
+        .header-corp-card {
+            background: #FFFFFF;
+            padding: 20px 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 3px solid var(--primary-blue);
+            margin-bottom: 25px;
+        }
+        .header-corp-card h1 {
+            color: var(--primary-blue);
+            font-size: 22px;
+            margin: 0;
+        }
+        .header-corp-brand {
+            font-weight: bold;
+            color: var(--secondary-blue);
+            font-size: 16px;
         }
 
         /* Encabezados de sección estilizados */
@@ -53,6 +67,17 @@ st.markdown(
             font-weight: 600;
         }
     </style>
+""",
+    unsafe_allow_html=True,
+)
+
+# --- CABECERA VISUAL CORPORATIVA ---
+st.markdown(
+    """
+    <div class="header-corp-card">
+        <h1>🌾 Sistema Provencesa - Control de Calidad</h1>
+        <div class="header-corp-brand">EMPRESAS POLAR</div>
+    </div>
 """,
     unsafe_allow_html=True,
 )
