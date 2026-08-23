@@ -10,7 +10,7 @@ import streamlit as st
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
-    page_title="Sistema Provencesa - Control de Calidad",
+    page_title="Provencesa - Control de Calidad",
     layout="wide",
     page_icon="🌾",
 )
@@ -75,7 +75,7 @@ st.markdown(
 st.markdown(
     """
     <div class="header-corp-card">
-        <h1>🌾 Sistema Provencesa - Control de Calidad</h1>
+        <h1>🌾 Provencesa - Control de Calidad</h1>
         <div class="header-corp-brand">EMPRESAS POLAR</div>
     </div>
 """,
@@ -474,33 +474,54 @@ if st.session_state.historico:
 
   def generar_reporte_profesional(df):
     promedios = df.mean(numeric_only=True)
-    reporte = "📋 *REPORTE DIARIO DE RECEPCIÓN*\n"
-    reporte += "========================================\n"
-    reporte += f"📅 FECHA: {datetime.now().strftime('%d/%m/%Y')}\n"
-    reporte += f"🚚 VEHÍCULOS ACUMULADOS: {len(df)}\n"
-    reporte += "========================================\n\n"
 
-    campos = [
-        ("Humedad", "Humedad %"),
-        ("Impureza", "Impureza %"),
-        ("Total Dañados", "Grano Dañado Total (GDT)"),
-        ("Granos Part.", "Granos Partidos"),
-        ("Mezcla Color", "Mezcla Color"),
-        ("Peso Vol", "Peso Específico"),
-        ("Insectos V.", "Insectos Vivos"),
-        ("Aflatoxina", "Aflatoxinas Totales"),
-        ("Granos Part. Peq.", "Granos Partidos Pequeños"),
-        ("Fumonisina", "Fumonisina"),
+    ultimo = df.iloc[-1]
+    analista = ultimo.get("Analista", "Osmar Rodríguez")
+    silo = ultimo.get("Centros Externos", "GRAMOLCA")
+    destino = ultimo.get("Destino", "Planta Turmero")
+
+    reporte = f"*{analista}*\n"
+    reporte += "Buenos días.\n"
+    reporte += f"Despacho:\n"
+    reporte += f"Fecha: {datetime.now().strftime('%d/%m/%Y')}\n"
+    reporte += f"Silos: {silo}\n"
+    reporte += "Material: MBI(12202968)\n"
+    reporte += f"Destino: {destino}.\n"
+
+    parametros_formato = [
+        ("Humedad", "H", "%"),
+        ("Impureza", "Imp", "%"),
+        ("Partidos Peq.", "Gpp", "%"),
+        ("Germen Dañado", "G.D", "%"),
+        ("Dañado Calor", "DC", "%"),
+        ("Dañado Insecto", "D Insecto", "%"),
+        ("Infectados", "G Infect", "%"),
+        ("Total Dañados", "GDT", "%"),
+        ("Granos Part.", "GP", "%"),
+        ("Cristalizados", "GC", "%"),
+        ("Mezcla Color", "M/C", "%"),
+        ("Peso Vol", "P.Esp", ""),
+        ("Aflatoxina", "Aflatoxina", "PPB"),
+        ("Fumonisina", "Fumonisina", "PPM"),
     ]
 
-    reporte += "📊 *RESULTADOS PROMEDIOS ACUMULADOS:*\n"
-    reporte += "----------------------------------------\n"
-    for key, label in campos:
-      valor = promedios.get(key, 0.0)
-      reporte += f"{label:<28} | {valor:>6.2f}\n"
+    for col_df, abreviatura, unidad in parametros_formato:
+      valor = promedios.get(col_df, 0.0)
+      if unidad == "PPB" or unidad == "PPM":
+        reporte += f"⬛ {abreviatura}: {valor:.1f} {unidad}\n"
+      elif unidad == "%":
+        reporte += f"⬛ {abreviatura}: {valor:.2f}%\n"
+      else:
+        reporte += f"⬛ {abreviatura}: {valor:.3f}\n"
 
-    reporte += "----------------------------------------\n"
-    reporte += f"✅ Aprobados: {len(df[df['Estatus']=='Aprobado'])}  |  ❌ Rechazados: {len(df[df['Estatus']=='Rechazado'])}"
+    aprobados = len(df[df["Estatus"] == "Aprobado"])
+    rechazados = len(df[df["Estatus"] == "Rechazado"])
+
+    if aprobados > 0:
+      reporte += f"✅ {aprobados} vehículos despachados.\n"
+    if rechazados > 0:
+      reporte += f"❌ {rechazados} vehículos rechazados.\n"
+
     return reporte
 
   reporte_final = generar_reporte_profesional(
@@ -527,38 +548,23 @@ if st.session_state.historico:
     if not df.empty:
       columnas_numericas = [col for col in nombres_items if col in df.columns]
 
-      agrupacion_cols = [
-          "Estado",
-          "Fecha",
-          "Contrato",
-          "Maíz",
-          "COD MAIZ SAP",
-          "Centros Externos",
-      ]
+      agrupacion_cols = ["Fecha", "Centros Externos", "Cereal", "Origen"]
+      agrupacion_cols = [c for c in agrupacion_cols if c in df.columns]
 
-      df_resumen = (
-          df.groupby(agrupacion_cols, dropna=False)
-          .agg(
-              {
-                  **{col: "mean" for col in columnas_numericas},
-                  "N° Vehículos Analizados": "sum",
-              }
-          )
-          .reset_index()
-      )
-
-      cols_ordenadas = [
-          "Estado",
-          "Fecha",
-          "Contrato",
-          "Maíz",
-          "COD MAIZ SAP",
-          "N° Vehículos Analizados",
-          "Centros Externos",
-      ] + columnas_numericas
-      df_resumen = df_resumen[
-          [c for c in cols_ordenadas if c in df_resumen.columns]
-      ]
+      if agrupacion_cols:
+        df_resumen = (
+            df.groupby(agrupacion_cols, dropna=False)
+            .agg(
+                {
+                    **{col: "mean" for col in columnas_numericas},
+                    "N° Vehículos Analizados": "sum",
+                }
+            )
+            .reset_index()
+        )
+      else:
+        df_resumen = df[columnas_numericas].mean().to_frame().T
+        df_resumen["N° Vehículos Analizados"] = len(df)
 
       df_resumen.to_excel(writer, sheet_name="Resumen por Día", index=False)
 
