@@ -8,7 +8,11 @@ import pandas as pd
 import streamlit as st
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Sistema de Control de Calidad | Provencesa", layout="wide", page_icon="🌾")
+st.set_page_config(
+    page_title="Sistema de Control de Calidad | Provencesa",
+    layout="wide",
+    page_icon="🌾",
+)
 
 # Etiquetas para resultados
 nombres_items = [
@@ -54,7 +58,9 @@ try:
     else:
         st.error("No se encontraron modelos de IA disponibles.")
 except Exception as e:
-    st.error(f"Error de configuración: {e}")
+    st.error(
+        f"Error de configuración (Verifica tus secrets.toml): {e}"
+    )
 
 
 # --- FUNCIÓN GENERADORA DE IMAGEN MEJORADA ---
@@ -128,7 +134,7 @@ def procesar_planilla_con_ia(archivo):
         return None
 
 
-# --- FUNCIÓN DE LECTURA EN LOTE (SIN LÍMITES) ---
+# --- FUNCIÓN DE LECTURA EN LOTE (SIN LÍMITES Y ROBUSTA) ---
 def procesar_bytes_planilla_con_ia(img_bytes):
     prompt = """Analiza la planilla y extrae los datos. Devuelve un JSON sin formato Markdown estricto.
     Formato requerido: 
@@ -213,7 +219,6 @@ with st.sidebar:
                     st.session_state.datos_ia = resultado
                     st.rerun()
     else:
-        # Permitir la carga de múltiples imágenes sin límite artificial
         archivos_lote = st.file_uploader(
             "Subir múltiples fotos (Sin límite de cantidad)",
             type=["jpg", "png", "jpeg"],
@@ -223,6 +228,7 @@ with st.sidebar:
             barra_progreso = st.progress(0)
             total_archivos = len(archivos_lote)
             procesados_exito = 0
+            errores = 0
 
             for i, archivo_item in enumerate(archivos_lote):
                 try:
@@ -246,7 +252,7 @@ with st.sidebar:
                             vals_lote[nombres_items[idx_item]] = val_L
 
                         nuevo_registro = {
-                            "Estado": "", 
+                            "Estado": "",
                             "Fecha": datetime.now().strftime("%Y-%m-%d"),
                             "Contrato": cabe_lote.get("contrato", ""),
                             "Maíz": "MBI",
@@ -264,14 +270,21 @@ with st.sidebar:
                         }
                         st.session_state.historico.append(nuevo_registro)
                         procesados_exito += 1
+                    else:
+                        errores += 1
                 except Exception:
-                    pass
+                    errores += 1
 
                 barra_progreso.progress((i + 1) / total_archivos)
 
-            st.success(
-                f"¡Lote procesado! Se añadieron {procesados_exito} registros de {total_archivos} al acumulado."
-            )
+            if errores > 0:
+                st.warning(
+                    f"Se procesaron {procesados_exito} con éxito, pero {errores} archivos fallaron en la lectura por la IA."
+                )
+            else:
+                st.success(
+                    f"¡Lote procesado con éxito! Se añadieron los {procesados_exito} registros al acumulado."
+                )
             st.rerun()
 
     st.divider()
