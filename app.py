@@ -112,19 +112,12 @@ if "historico" not in st.session_state:
 if "datos_ia" not in st.session_state:
     st.session_state.datos_ia = {}
 
-# Configuración IA (Búsqueda dinámica de modelo para evitar error 404)
+# --- CONFIGURACIÓN IA CORREGIDA ---
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
-    modelos_disponibles = [
-        m.name
-        for m in genai.list_models()
-        if "generateContent" in m.supported_generation_methods
-    ]
-    if modelos_disponibles:
-        model = genai.GenerativeModel(modelos_disponibles[0])
-    else:
-        st.error("No se encontraron modelos de IA disponibles.")
+    # Uso directo del modelo actualizado para evitar errores 404
+    model = genai.GenerativeModel("gemini-3.6-flash")
 except Exception as e:
     st.error(f"Error de configuración (Verifica tus secrets.toml): {e}")
 
@@ -473,7 +466,7 @@ if st.session_state.historico:
         promedios = df.mean(numeric_only=True)
 
         ultimo = df.iloc[-1]
-        analista = ultimo.get("Analista", "Analista de Calidad")
+        analista = ultimo.get("Analista", "Analista Calidad")
         silo = ultimo.get("Centros Externos", "PROVECESA")
         destino = ultimo.get("Destino", "Planta")
 
