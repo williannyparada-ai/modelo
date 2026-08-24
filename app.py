@@ -15,56 +15,90 @@ st.set_page_config(
     page_icon="🌾",
 )
 
-# --- ESTILOS CSS PERSONALIZADOS (Estética Corporativa Profesional) ---
+# --- ESTILOS CSS PERSONALIZADOS (Propuesta Visual Profesional y Moderna) ---
 st.markdown(
     """
     <style>
+        /* Fondo general de la aplicación un poco más suave y elegante */
+        .stApp {
+            background-color: #F4F6F9;
+        }
+
         :root {
             --primary-blue: #00467F;
             --secondary-blue: #0066B3;
-            --bg-light: #F8F9FA;
-            --text-dark: #333333;
-            --border-color: #E0E0E0;
+            --bg-card: #FFFFFF;
+            --text-main: #2C3E50;
+            --border-color: #D1D8E0;
         }
         
-        /* Contenedor principal estilo tarjeta corporativa */
+        /* Contenedor principal estilo tarjeta corporativa mejorada */
         .header-corp-card {
-            background: #FFFFFF;
-            padding: 20px 25px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            background: var(--bg-card);
+            padding: 24px 30px;
+            border-radius: 14px;
+            box-shadow: 0 6px 20px rgba(0, 70, 127, 0.08);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 3px solid var(--primary-blue);
-            margin-bottom: 25px;
+            border-left: 6px solid var(--primary-blue);
+            margin-bottom: 30px;
         }
         .header-corp-card h1 {
             color: var(--primary-blue);
-            font-size: 22px;
+            font-size: 26px;
+            font-weight: 700;
             margin: 0;
+            letter-spacing: -0.5px;
         }
         .header-corp-brand {
-            font-weight: bold;
+            font-weight: 700;
             color: var(--secondary-blue);
-            font-size: 16px;
+            font-size: 18px;
+            background: #E8F1F5;
+            padding: 6px 14px;
+            border-radius: 8px;
         }
 
-        /* Encabezados de sección estilizados */
+        /* Encabezados de sección estilizados y más grandes */
         .section-header {
-            font-size: 18px;
+            font-size: 20px;
             color: var(--primary-blue);
             border-bottom: 2px solid var(--primary-blue);
-            padding-bottom: 5px;
-            margin-top: 25px;
-            margin-bottom: 15px;
-            font-weight: 600;
+            padding-bottom: 8px;
+            margin-top: 35px;
+            margin-bottom: 20px;
+            font-weight: 700;
+            letter-spacing: -0.3px;
         }
 
-        /* Ajuste visual para botones principales */
+        /* Aumento general de tamaño de letra en textos y etiquetas de Streamlit */
+        p, span, label, .stTextInput label, .stNumberInput label {
+            font-size: 16px !important;
+            color: var(--text-main);
+        }
+
+        /* Tarjetas de métricas con mejor presencia visual */
+        [data-testid="stMetric"] {
+            background-color: #FFFFFF;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+            border: 1px solid var(--border-color);
+        }
+
+        /* Ajuste visual para botones principales con efecto hover */
         .stButton>button {
-            border-radius: 6px;
+            border-radius: 8px;
             font-weight: 600;
+            font-size: 16px;
+            padding: 0.6rem 1rem;
+            transition: all 0.3s ease;
+        }
+        
+        .stButton>button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 70, 127, 0.2);
         }
     </style>
 """,
@@ -116,7 +150,6 @@ if "datos_ia" not in st.session_state:
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
-    # Uso directo del modelo actualizado para evitar errores 404
     model = genai.GenerativeModel("gemini-3.6-flash")
 except Exception as e:
     st.error(f"Error de configuración (Verifica tus secrets.toml): {e}")
