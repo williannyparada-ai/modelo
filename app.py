@@ -1,17 +1,85 @@
 from datetime import datetime
 import io
 import json
+import time
 from urllib.parse import quote
 import google.generativeai as genai
 from PIL import Image, ImageDraw, ImageFont
 import pandas as pd
 import streamlit as st
 
-# --- CONFIGURACIÓN ---
+# --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
-    page_title="Sistema de Control de Calidad | Provencesa",
+    page_title="Sistema Provencesa - Control de Calidad",
     layout="wide",
     page_icon="🌾",
+)
+
+# --- ESTILOS CSS PERSONALIZADOS (Estética Corporativa Profesional) ---
+st.markdown(
+    """
+    <style>
+        :root {
+            --primary-blue: #00467F;
+            --secondary-blue: #0066B3;
+            --bg-light: #F8F9FA;
+            --text-dark: #333333;
+            --border-color: #E0E0E0;
+        }
+        
+        /* Contenedor principal estilo tarjeta corporativa */
+        .header-corp-card {
+            background: #FFFFFF;
+            padding: 20px 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 3px solid var(--primary-blue);
+            margin-bottom: 25px;
+        }
+        .header-corp-card h1 {
+            color: var(--primary-blue);
+            font-size: 22px;
+            margin: 0;
+        }
+        .header-corp-brand {
+            font-weight: bold;
+            color: var(--secondary-blue);
+            font-size: 16px;
+        }
+
+        /* Encabezados de sección estilizados */
+        .section-header {
+            font-size: 18px;
+            color: var(--primary-blue);
+            border-bottom: 2px solid var(--primary-blue);
+            padding-bottom: 5px;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        /* Ajuste visual para botones principales */
+        .stButton>button {
+            border-radius: 6px;
+            font-weight: 600;
+        }
+    </style>
+""",
+    unsafe_allow_html=True,
+)
+
+# --- CABECERA VISUAL CORPORATIVA ---
+st.markdown(
+    """
+    <div class="header-corp-card">
+        <h1>🌾 Sistema Provencesa - Control de Calidad</h1>
+        <div class="header-corp-brand">EMPRESAS POLAR</div>
+    </div>
+""",
+    unsafe_allow_html=True,
 )
 
 # Etiquetas para resultados
@@ -38,7 +106,7 @@ nombres_items = [
     "Fumonisina",
 ]
 
-# Inicialización de estado
+# Inicialización de estado para acumulación persistente
 if "historico" not in st.session_state:
     st.session_state.historico = []
 if "datos_ia" not in st.session_state:
@@ -58,9 +126,7 @@ try:
     else:
         st.error("No se encontraron modelos de IA disponibles.")
 except Exception as e:
-    st.error(
-        f"Error de configuración (Verifica tus secrets.toml): {e}"
-    )
+    st.error(f"Error de configuración (Verifica tus secrets.toml): {e}")
 
 
 # --- FUNCIÓN GENERADORA DE IMAGEN MEJORADA ---
@@ -113,16 +179,16 @@ def generar_reporte_infografia(df):
 
 # --- FUNCIÓN DE LECTURA (INDIVIDUAL) ---
 def procesar_planilla_con_ia(archivo):
-    imagen_pil = Image.open(archivo)
-    img_byte_arr = io.BytesIO()
-    imagen_pil.save(img_byte_arr, format="JPEG")
-    img_bytes = img_byte_arr.getvalue()
-
-    prompt = """Analiza la planilla y extrae los datos. Devuelve un JSON sin formato Markdown.
-    Formato: {"cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "documento": ""},
-    "items": {"01": 0.0, "02": 0.0, "03": 0.0, "04": 0.0, "05": 0.0, "06": 0.0, "07": 0.0, "08": 0.0, "09": 0.0, "10": 0.0, "11": 0.0, "12": 0.0, "13": 0.0, "14": 0.0, "15": 0.0, "16": 0.0, "17": 0.0, "18": 0.0, "19": 0.0, "20": 0.0}}"""
-
     try:
+        imagen_pil = Image.open(archivo).convert("RGB")
+        img_byte_arr = io.BytesIO()
+        imagen_pil.save(img_byte_arr, format="JPEG")
+        img_bytes = img_byte_arr.getvalue()
+
+        prompt = """Analiza la planilla y extrae los datos. Devuelve un JSON sin formato Markdown.
+        Formato: {"cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "documento": "", "estado": ""},
+        "items": {"01": 0.0, "02": 0.0, "03": 0.0, "04": 0.0, "05": 0.0, "06": 0.0, "07": 0.0, "08": 0.0, "09": 0.0, "10": 0.0, "11": 0.0, "12": 0.0, "13": 0.0, "14": 0.0, "15": 0.0, "16": 0.0, "17": 0.0, "18": 0.0, "19": 0.0, "20": 0.0}}"""
+
         response = model.generate_content(
             [prompt, {"mime_type": "image/jpeg", "data": img_bytes}]
         )
@@ -134,23 +200,35 @@ def procesar_planilla_con_ia(archivo):
         return None
 
 
-# --- FUNCIÓN DE LECTURA EN LOTE (SIN LÍMITES Y ROBUSTA) ---
+# --- FUNCIÓN DE LECTURA EN BLOQUE ---
 def procesar_bytes_planilla_con_ia(img_bytes):
-    prompt = """Analiza la planilla y extrae los datos. Devuelve un JSON sin formato Markdown estricto.
-    Formato requerido: 
-    {
-      "cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "documento": ""},
-      "items": {"01": 0.0, "02": 0.0, "03": 0.0, "04": 0.0, "05": 0.0, "06": 0.0, "07": 0.0, "08": 0.0, "09": 0.0, "10": 0.0, "11": 0.0, "12": 0.0, "13": 0.0, "14": 0.0, "15": 0.0, "16": 0.0, "17": 0.0, "18": 0.0, "19": 0.0, "20": 0.0}
-    }"""
     try:
+        imagen_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+        img_byte_arr = io.BytesIO()
+        imagen_pil.save(img_byte_arr, format="JPEG")
+        img_bytes_limpios = img_byte_arr.getvalue()
+
+        prompt = """Analiza la imagen de esta planilla de laboratorio agroindustrial. Extrae la información disponible de los campos de cabecera (incluyendo 'estado' si aparece geográficamente) y los 20 ítems numéricos de laboratorio. 
+        Devuelve ÚNICAMENTE un objeto JSON válido sin bloques de código ni texto adicional, respetando exactamente esta estructura:
+        {
+          "cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "documento": "", "estado": ""},
+          "items": {"01": 0.0, "02": 0.0, "03": 0.0, "04": 0.0, "05": 0.0, "06": 0.0, "07": 0.0, "08": 0.0, "09": 0.0, "10": 0.0, "11": 0.0, "12": 0.0, "13": 0.0, "14": 0.0, "15": 0.0, "16": 0.0, "17": 0.0, "18": 0.0, "19": 0.0, "20": 0.0}
+        }"""
+
         response = model.generate_content(
-            [prompt, {"mime_type": "image/jpeg", "data": img_bytes}]
+            [prompt, {"mime_type": "image/jpeg", "data": img_bytes_limpios}]
         )
-        texto = response.text.replace("```json", "").replace("```", "").strip()
+        texto = (
+            response.text.replace("```json", "")
+            .replace("```", "")
+            .strip()
+        )
         inicio, fin = texto.find("{"), texto.rfind("}") + 1
-        return json.loads(texto[inicio:fin])
-    except Exception as e:
+        if inicio != -1 and fin != 0:
+            return json.loads(texto[inicio:fin])
         return None
+    except Exception as e:
+        raise e
 
 
 # --- 1. RESUMEN DE JORNADA Y TENDENCIAS ---
@@ -160,27 +238,30 @@ if st.session_state.historico:
         df_hist["Fecha"] + " " + datetime.now().strftime("%H:%M:%S")
     )
 
-    st.subheader("📊 Resumen de Jornada")
+    st.markdown(
+        '<div class="section-header">📊 Resumen de Jornada Acumulado</div>',
+        unsafe_allow_html=True,
+    )
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Total Analizado", len(df_hist))
+    m1.metric("Total Acumulado", len(df_hist))
     m2.metric("✅ Aprobados", len(df_hist[df_hist["Estatus"] == "Aprobado"]))
     m3.metric("❌ Rechazados", len(df_hist[df_hist["Estatus"] == "Rechazado"]))
+    m4.metric("💧 Prom. Humedad", f"{df_hist['Humedad'].mean():.2f} %")
 
-    col_prom1, col_prom2, col_prom3, col_prom4 = st.columns(4)
-    col_prom1.metric("💧 Prom. Humedad", f"{df_hist['Humedad'].mean():.2f} %")
-    col_prom2.metric("🌾 Prom. GDT", f"{df_hist['Total Dañados'].mean():.2f} %")
-    col_prom3.metric(
+    col_prom1, col_prom2, col_prom3 = st.columns(3)
+    col_prom1.metric("🌾 Prom. GDT", f"{df_hist['Total Dañados'].mean():.2f} %")
+    col_prom2.metric(
         "🍄 Prom. Aflatoxina", f"{df_hist['Aflatoxina'].mean():.2f} PPB"
     )
-    col_prom4.metric(
+    col_prom3.metric(
         "🧪 Prom. Fumonisina", f"{df_hist['Fumonisina'].mean():.2f} PPM"
     )
 
     st.write("")
 
     with st.expander(
-        "📈 Ver Gráficos de Tendencia (vs. Registro #)", expanded=False
+        "📈 Ver Gráficos de Tendencia (Acumulado de la Jornada)", expanded=False
     ):
         c1, c2 = st.columns(2)
 
@@ -206,9 +287,9 @@ if st.session_state.historico:
 
 # --- 2. SIDEBAR ---
 with st.sidebar:
-    st.header("📸 Escáner")
+    st.header("📸 Escáner por Lotes")
 
-    modo_carga = st.radio("Modo de escaneo:", ["Individual", "Carga en Lote"])
+    modo_carga = st.radio("Modo de escaneo:", ["Individual", "Lote de Fotos"])
 
     if modo_carga == "Individual":
         archivo = st.file_uploader("Subir foto", type=["jpg", "png", "jpeg"])
@@ -219,109 +300,122 @@ with st.sidebar:
                     st.session_state.datos_ia = resultado
                     st.rerun()
     else:
+        st.info(
+            "Sube tus lotes progresivamente (ej. 5 fotos, luego 10 más). Se acumularán automáticamente."
+        )
         archivos_lote = st.file_uploader(
-            "Subir múltiples fotos (Sin límite de cantidad)",
+            "Subir fotos de vehículos",
             type=["jpg", "png", "jpeg"],
             accept_multiple_files=True,
+            key="uploader_lotes",
         )
-        if archivos_lote and st.button("🤖 PROCESAR LOTE COMPLETO"):
-            barra_progreso = st.progress(0)
-            total_archivos = len(archivos_lote)
-            procesados_exito = 0
-            errores = 0
 
-            for i, archivo_item in enumerate(archivos_lote):
-                try:
-                    imagen_pil = Image.open(archivo_item)
-                    img_byte_arr = io.BytesIO()
-                    imagen_pil.save(img_byte_arr, format="JPEG")
-                    img_bytes = img_byte_arr.getvalue()
+        if archivos_lote:
+            total_cargados = len(archivos_lote)
+            st.caption(
+                f"📁 Archivos cargados en este selector: {total_cargados} fotos."
+            )
 
-                    res_json = procesar_bytes_planilla_con_ia(img_bytes)
-                    if res_json:
-                        cabe_lote = res_json.get("cabecera", {})
-                        items_lote = res_json.get("items", {})
+            if st.button("🤖 PROCESAR LOTE CARGADO (Bloques de 5 recomendados)"):
+                lote_a_procesar = archivos_lote[:5]
+                barra_progreso = st.progress(0)
+                total_archivos = len(lote_a_procesar)
+                procesados_exito = 0
 
-                        vals_lote = {}
-                        for idx_item in range(20):
-                            k_str = str(idx_item + 1).zfill(2)
-                            try:
-                                val_L = float(items_lote.get(k_str, 0.0))
-                            except:
-                                val_L = 0.0
-                            vals_lote[nombres_items[idx_item]] = val_L
+                for i, archivo_item in enumerate(lote_a_procesar):
+                    try:
+                        img_bytes = archivo_item.getvalue()
+                        res_json = procesar_bytes_planilla_con_ia(img_bytes)
 
-                        nuevo_registro = {
-                            "Estado": "",
-                            "Fecha": datetime.now().strftime("%Y-%m-%d"),
-                            "Contrato": cabe_lote.get("contrato", ""),
-                            "Maíz": "MBI",
-                            "COD MAIZ SAP": "MBI(12202968)",
-                            "Analista": cabe_lote.get("analista", "Automático"),
-                            "Procedencia": cabe_lote.get("procedencia", "N/D"),
-                            "Placa": cabe_lote.get("placa", "N/D"),
-                            "Silo": cabe_lote.get("silo", "N/D"),
-                            "Destino": cabe_lote.get("destino", "N/D"),
-                            "Documento": cabe_lote.get("documento", "N/D"),
-                            "Cereal": "Maíz Blanco",
-                            "Origen": "Nacional",
-                            **vals_lote,
-                            "Estatus": "Aprobado",
-                        }
-                        st.session_state.historico.append(nuevo_registro)
-                        procesados_exito += 1
-                    else:
-                        errores += 1
-                except Exception:
-                    errores += 1
+                        time.sleep(3)  # Pausa prudente anti-saturación
 
-                barra_progreso.progress((i + 1) / total_archivos)
+                        if res_json:
+                            cabe_lote = res_json.get("cabecera", {})
+                            items_lote = res_json.get("items", {})
 
-            if errores > 0:
-                st.warning(
-                    f"Se procesaron {procesados_exito} con éxito, pero {errores} archivos fallaron en la lectura por la IA."
-                )
-            else:
-                st.success(
-                    f"¡Lote procesado con éxito! Se añadieron los {procesados_exito} registros al acumulado."
-                )
-            st.rerun()
+                            vals_lote = {}
+                            for idx_item in range(20):
+                                k_str = str(idx_item + 1).zfill(2)
+                                try:
+                                    val_L = float(items_lote.get(k_str, 0.0))
+                                except:
+                                    val_L = 0.0
+                                vals_lote[nombres_items[idx_item]] = val_L
+
+                            nuevo_registro = {
+                                "Estado": cabe_lote.get("estado", ""),
+                                "Fecha": datetime.now().strftime("%Y-%m-%d"),
+                                "Contrato": cabe_lote.get("contrato", "0"),
+                                "Maíz": "MBI",
+                                "COD MAIZ SAP": "MBI(12202968)",
+                                "N° Vehículos Analizados": 1,
+                                "Centros Externos": cabe_lote.get("procedencia", "PROVECESA"),
+                                "Analista": cabe_lote.get("analista", "Automático"),
+                                "Placa": cabe_lote.get("placa", "N/D"),
+                                "Silo": cabe_lote.get("silo", "N/D"),
+                                "Destino": cabe_lote.get("destino", "N/D"),
+                                "Documento": cabe_lote.get("documento", "N/D"),
+                                "Cereal": "Maíz Blanco",
+                                "Origen": "Nacional",
+                                **vals_lote,
+                                "Estatus": "Aprobado",
+                            }
+                            st.session_state.historico.append(nuevo_registro)
+                            procesados_exito += 1
+                        else:
+                            st.warning(
+                                f"La IA no devolvió estructura en: {archivo_item.name}"
+                            )
+                    except Exception as ex:
+                        st.error(f"Error en {archivo_item.name}: {ex}")
+
+                    barra_progreso.progress((i + 1) / total_archivos)
+
+                if procesados_exito > 0:
+                    st.success(
+                        f"¡Lote procesado con éxito! Se acumularán {procesados_exito} registros. Total acumulado: {len(st.session_state.historico)}"
+                    )
+                    st.rerun()
 
     st.divider()
 
     st.subheader("🗑️ Gestión de Jornada")
-    if st.button("🧹 Limpiar Registro Actual"):
+    if st.button("🧹 Limpiar Registro Actual (Borrar Acumulado)"):
         st.session_state.historico = []
         st.session_state.datos_ia = {}
-        st.success("¡Registro limpiado con éxito!")
+        st.success("¡Registro acumulado limpiado con éxito!")
         st.rerun()
 
-# --- 3. FORMULARIO ---
+# --- 3. FORMULARIO PRINCIPAL ---
 d = st.session_state.get("datos_ia", {})
 cabe = d.get("cabecera", {})
 items = d.get("items", {})
 
 with st.form("registro_maestro"):
-    st.subheader("📋 Datos del Encabezado")
+    st.markdown(
+        '<div class="section-header">📋 Datos del Encabezado</div>',
+        unsafe_allow_html=True,
+    )
+
     c1, c2, c3, c4 = st.columns(4)
-    f_estado = c1.text_input("Estado", value="")
+    f_estado = c1.text_input("Estado", value=cabe.get("estado", ""))
     f_fecha = c2.date_input("Fecha", datetime.now())
     f_contrato = c3.text_input("Contrato", value=cabe.get("contrato", ""))
-    f_analista = c4.text_input("Analista", value=cabe.get("analista", ""))
+    f_procedencia = c4.text_input(
+        "Centros Externos", value=cabe.get("procedencia", "")
+    )
 
     c5, c6, c7, c8 = st.columns(4)
-    f_procedencia = c5.text_input(
-        "Procedencia (Centro)", value=cabe.get("procedencia", "")
-    )
+    f_analista = c5.text_input("Analista", value=cabe.get("analista", ""))
     f_placa = c6.text_input("Placa", value=cabe.get("placa", ""))
     f_silo = c7.text_input("Silo", value=cabe.get("silo", ""))
-    f_destino = c8.text_input("Destino", value=cabe.get("destino", ""))
+    f_doc = c8.text_input("Documento", value=cabe.get("documento", ""))
 
-    c9, c10 = st.columns(2)
-    f_cereal = c9.selectbox("Cereal", ["Maíz Blanco", "Maíz Amarillo"])
-    f_origen = c10.selectbox("Origen", ["Nacional", "Importado"])
+    st.markdown(
+        '<div class="section-header">🔬 Resultados de Laboratorio</div>',
+        unsafe_allow_html=True,
+    )
 
-    st.subheader("🔬 Resultados de Laboratorio")
     cols = st.columns(5)
     vals_registro = {}
 
@@ -338,24 +432,28 @@ with st.form("registro_maestro"):
                 f"{nombres_items[i]}", value=val_limpio, step=0.01
             )
 
+    st.write("")
     f_estatus = st.radio("Estatus:", ["Aprobado", "Rechazado"], horizontal=True)
 
-    submit = st.form_submit_button("✅ REGISTRAR Y GENERAR EXCEL")
+    submit = st.form_submit_button(
+        "✅ REGISTRAR Y ACUMULAR EN REPORTE GENERAL", use_container_width=True
+    )
 
     if submit:
         nuevo = {
             "Estado": f_estado,
             "Fecha": f_fecha.strftime("%Y-%m-%d"),
             "Contrato": f_contrato,
-            "Maíz": "MBI" if "Blanco" in f_cereal else "MAI",
+            "Maíz": "MBI",
             "COD MAIZ SAP": "MBI(12202968)",
+            "N° Vehículos Analizados": 1,
+            "Centros Externos": f_procedencia,
             "Analista": f_analista,
-            "Procedencia": f_procedencia,
             "Placa": f_placa,
             "Silo": f_silo,
-            "Destino": f_destino,
-            "Cereal": f_cereal,
-            "Origen": f_origen,
+            "Documento": f_doc,
+            "Cereal": "Maíz Blanco",
+            "Origen": "Nacional",
             **vals_registro,
             "Estatus": f_estatus,
         }
@@ -364,38 +462,63 @@ with st.form("registro_maestro"):
         st.rerun()
 
 # --- REPORTE PARA WHATSAPP ---
-st.subheader("📱 Reporte para WhatsApp")
+st.markdown(
+    '<div class="section-header">📱 Reporte para WhatsApp</div>',
+    unsafe_allow_html=True,
+)
 
 if st.session_state.historico:
 
     def generar_reporte_profesional(df):
         promedios = df.mean(numeric_only=True)
-        reporte = "📋 *REPORTE DIARIO DE RECEPCIÓN*\n"
-        reporte += "========================================\n"
-        reporte += f"📅 FECHA: {datetime.now().strftime('%d/%m/%Y')}\n"
-        reporte += f"🚚 VEHÍCULOS: {len(df)}\n"
-        reporte += "========================================\n\n"
 
-        campos = [
-            ("Humedad", "Humedad %"),
-            ("Impureza", "Impureza %"),
-            ("Total Dañados", "Grano Dañado Total (GDT)"),
-            ("Granos Part.", "Granos Partidos"),
-            ("Mezcla Color", "Mezcla Color"),
-            ("Peso Vol", "Peso Específico"),
-            ("Insectos V.", "Insectos Vivos"),
-            ("Aflatoxina", "Aflatoxinas Totales"),
-            ("Fumonisina", "Fumonisina"),
+        ultimo = df.iloc[-1]
+        analista = ultimo.get("Analista", "Analista de Calidad")
+        silo = ultimo.get("Centros Externos", "PROVECESA")
+        destino = ultimo.get("Destino", "Planta")
+
+        reporte = f"*{analista}*\n"
+        reporte += "Buenos días.\n"
+        reporte += f"Despacho:\n"
+        reporte += f"Fecha: {datetime.now().strftime('%d/%m/%Y')}\n"
+        reporte += f"Silos: {silo}\n"
+        reporte += "Material: MBI(12202968)\n"
+        reporte += f"Destino: {destino}.\n"
+
+        parametros_formato = [
+            ("Humedad", "H", "%"),
+            ("Impureza", "Imp", "%"),
+            ("Partidos Peq.", "Gpp", "%"),
+            ("Germen Dañado", "G.D", "%"),
+            ("Dañado Calor", "DC", "%"),
+            ("Dañado Insecto", "D Insecto", "%"),
+            ("Infectados", "G Infect", "%"),
+            ("Total Dañados", "GDT", "%"),
+            ("Granos Part.", "GP", "%"),
+            ("Cristalizados", "GC", "%"),
+            ("Mezcla Color", "M/C", "%"),
+            ("Peso Vol", "P.Esp", ""),
+            ("Aflatoxina", "Aflatoxina", "PPB"),
+            ("Fumonisina", "Fumonisina", "PPM"),
         ]
 
-        reporte += "📊 *RESULTADOS PROMEDIOS:*\n"
-        reporte += "----------------------------------------\n"
-        for key, label in campos:
-            valor = promedios.get(key, 0.0)
-            reporte += f"{label:<28} | {valor:>6.2f}\n"
+        for col_df, abreviatura, unidad in parametros_formato:
+            valor = promedios.get(col_df, 0.0)
+            if unidad == "PPB" or unidad == "PPM":
+                reporte += f"⬛ {abreviatura}: {valor:.1f} {unidad}\n"
+            elif unidad == "%":
+                reporte += f"⬛ {abreviatura}: {valor:.2f}%\n"
+            else:
+                reporte += f"⬛ {abreviatura}: {valor:.3f}\n"
 
-        reporte += "----------------------------------------\n"
-        reporte += f"✅ Aprobados: {len(df[df['Estatus']=='Aprobado'])}  |  ❌ Rechazados: {len(df[df['Estatus']=='Rechazado'])}"
+        aprobados = len(df[df["Estatus"] == "Aprobado"])
+        rechazados = len(df[df["Estatus"] == "Rechazado"])
+
+        if aprobados > 0:
+            reporte += f"✅ {aprobados} vehículos despachados.\n"
+        if rechazados > 0:
+            reporte += f"❌ {rechazados} vehículos rechazados.\n"
+
         return reporte
 
     reporte_final = generar_reporte_profesional(
@@ -407,7 +530,7 @@ if st.session_state.historico:
     st.link_button("🚀 Enviar por WhatsApp", url=link_wa)
 
 else:
-    st.info("Aún no hay datos para generar el reporte.")
+    st.info("Aún no hay datos acumulados para generar el reporte.")
 
 # --- 4. EXCEL MULTI-HOJA Y REPORTE VISUAL ---
 if st.session_state.historico:
@@ -419,37 +542,41 @@ if st.session_state.historico:
     with pd.ExcelWriter(buffer_xls, engine="xlsxwriter") as writer:
         df.to_excel(writer, sheet_name="Detalle", index=False)
 
-        columnas_agrupacion = [
-            col
-            for col in ["Estado", "Fecha", "Contrato", "Maíz", "Procedencia"]
-            if col in df.columns
-        ]
+        if not df.empty:
+            columnas_numericas = [col for col in nombres_items if col in df.columns]
 
-        if columnas_agrupacion:
-            agregaciones = {"Placa": "count"}
-            for col in nombres_items:
-                if col in df.columns:
-                    agregaciones[col] = "mean"
+            agrupacion_cols = ["Fecha", "Centros Externos", "Cereal", "Origen"]
+            agrupacion_cols = [c for c in agrupacion_cols if c in df.columns]
 
-            df_resumen = df.groupby(columnas_agrupacion, dropna=False).agg(
-                agregaciones
-            )
-            df_resumen = df_resumen.rename(
-                columns={"Placa": "N° Vehículos Analizados"}
-            )
-            df_resumen = df_resumen.reset_index()
+            if agrupacion_cols:
+                df_resumen = (
+                    df.groupby(agrupacion_cols, dropna=False)
+                    .agg(
+                        {
+                            **{col: "mean" for col in columnas_numericas},
+                            "N° Vehículos Analizados": "sum",
+                        }
+                    )
+                    .reset_index()
+                )
+            else:
+                df_resumen = df[columnas_numericas].mean().to_frame().T
+                df_resumen["N° Vehículos Analizados"] = len(df)
 
-            df_resumen.to_excel(writer, sheet_name="Resumen_Diario", index=False)
+            df_resumen.to_excel(writer, sheet_name="Resumen por Día", index=False)
 
     st.download_button(
-        "📥 Descargar Reporte Excel (Multi-hoja)",
+        "📥 Descargar Reporte Excel Acumulado",
         buffer_xls.getvalue(),
-        "Reporte_General.xlsx",
+        "Reporte_General_Acumulado.xlsx",
         "application/vnd.ms-excel",
     )
 
-    st.subheader("🖼️ Reporte Visual Profesional")
-    if st.button("🎨 Generar Infografía"):
+    st.markdown(
+        '<div class="section-header">🖼️ Reporte Visual Profesional</div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("🎨 Generar Infografía Acumulada"):
         with st.spinner("Diseñando reporte..."):
             img_bytes = generar_reporte_infografia(
                 pd.DataFrame(st.session_state.historico)
@@ -462,4 +589,4 @@ if st.session_state.historico:
                 mime="image/png",
             )
 else:
-    st.info("Aún no hay datos para generar reportes.")
+    st.info("Aún no hay datos acumulados para generar reportes.")
