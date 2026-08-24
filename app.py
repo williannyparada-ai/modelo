@@ -15,11 +15,11 @@ st.set_page_config(
     page_icon="🌾",
 )
 
-# --- ESTILOS CSS PERSONALIZADOS (Propuesta Visual Profesional y Moderna) ---
+# --- ESTILOS CSS PERSONALIZADOS (Encabezado Ajustado y Letras Más Grandes) ---
 st.markdown(
     """
     <style>
-        /* Fondo general de la aplicación un poco más suave y elegante */
+        /* Fondo general de la aplicación suave y elegante */
         .stApp {
             background-color: #F4F6F9;
         }
@@ -32,29 +32,29 @@ st.markdown(
             --border-color: #D1D8E0;
         }
         
-        /* Contenedor principal estilo tarjeta corporativa mejorada */
+        /* Cabecera corporativa compacta, elegante y con fuente más grande */
         .header-corp-card {
             background: var(--bg-card);
-            padding: 24px 30px;
-            border-radius: 14px;
-            box-shadow: 0 6px 20px rgba(0, 70, 127, 0.08);
+            padding: 18px 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 70, 127, 0.06);
             display: flex;
             justify-content: space-between;
             align-items: center;
             border-left: 6px solid var(--primary-blue);
-            margin-bottom: 30px;
+            margin-bottom: 25px;
         }
         .header-corp-card h1 {
             color: var(--primary-blue);
-            font-size: 26px;
-            font-weight: 700;
+            font-size: 30px !important;
+            font-weight: 800;
             margin: 0;
             letter-spacing: -0.5px;
         }
         .header-corp-brand {
             font-weight: 700;
             color: var(--secondary-blue);
-            font-size: 18px;
+            font-size: 16px;
             background: #E8F1F5;
             padding: 6px 14px;
             border-radius: 8px;
@@ -66,19 +66,18 @@ st.markdown(
             color: var(--primary-blue);
             border-bottom: 2px solid var(--primary-blue);
             padding-bottom: 8px;
-            margin-top: 35px;
-            margin-bottom: 20px;
+            margin-top: 30px;
+            margin-bottom: 15px;
             font-weight: 700;
-            letter-spacing: -0.3px;
         }
 
-        /* Aumento general de tamaño de letra en textos y etiquetas de Streamlit */
+        /* Aumento general de tamaño de letra en textos y etiquetas */
         p, span, label, .stTextInput label, .stNumberInput label {
             font-size: 16px !important;
             color: var(--text-main);
         }
 
-        /* Tarjetas de métricas con mejor presencia visual */
+        /* Tarjetas de métricas */
         [data-testid="stMetric"] {
             background-color: #FFFFFF;
             padding: 15px;
@@ -87,7 +86,7 @@ st.markdown(
             border: 1px solid var(--border-color);
         }
 
-        /* Ajuste visual para botones principales con efecto hover */
+        /* Botones principales con efecto hover */
         .stButton>button {
             border-radius: 8px;
             font-weight: 600;
