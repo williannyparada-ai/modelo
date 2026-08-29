@@ -150,6 +150,8 @@ if "historico" not in st.session_state:
     st.session_state.historico = []
 if "datos_ia" not in st.session_state:
     st.session_state.datos_ia = {}
+if "lote_procesado_exitoso" not in st.session_state:
+    st.session_state.lote_procesado_exitoso = False
 
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
@@ -316,7 +318,7 @@ if st.session_state.historico:
 
     st.divider()
 
-# --- 2. SIDEBAR CON SEMÁFORO VISUAL ---
+# --- 2. SIDEBAR CON CHECKLIST VISUAL DE ESTADOS ---
 with st.sidebar:
     st.header("📸 Escáner por Lotes")
 
@@ -348,9 +350,7 @@ with st.sidebar:
                     st.success("¡Lectura exitosa!")
                     st.rerun()
     else:
-        st.info(
-            "Sube tus fotos de golpe. Todas las que selecciones se procesarán automáticamente una por una."
-        )
+        st.info("Sube tus fotos de golpe. Se procesarán todas de forma continua.")
         archivos_lote = st.file_uploader(
             "Subir fotos de vehículos",
             type=["jpg", "png", "jpeg"],
@@ -358,28 +358,45 @@ with st.sidebar:
             key="uploader_lotes",
         )
 
+        # --- CHECKLIST VISUAL DE PROGRESO ---
+        st.markdown("### 📋 Estado del Proceso")
+        
         if not archivos_lote:
+            st.markdown("⬜ **1. Fotos cargadas:** Pendiente")
+            st.markdown("⬜ **2. Procesamiento IA:** En espera")
+            st.markdown("⬜ **3. Resultados listos:** Pendiente")
             st.markdown(
-                '<div class="semaforo-box semaforo-rojo">🔴 Estado: Esperando lote de fotos</div>',
+                '<div class="semaforo-box semaforo-rojo" style="margin-top: 10px;">🔴 Esperando lote de fotos</div>',
                 unsafe_allow_html=True,
             )
         else:
             total_cargados = len(archivos_lote)
-            st.markdown(
-                f'<div class="semaforo-box semaforo-verde">🟢 Estado: {total_cargados} fotos cargadas, listas para procesar</div>',
-                unsafe_allow_html=True,
-            )
+            
+            if st.session_state.lote_procesado_exitoso:
+                st.markdown(f"✅ **1. Fotos cargadas:** {total_cargados} listas")
+                st.markdown("✅ **2. Procesamiento IA:** Finalizado")
+                st.markdown("✅ **3. Resultados listos:** Disponibles en reporte")
+                st.markdown(
+                    f'<div class="semaforo-box semaforo-verde" style="margin-top: 10px;">🟢 ¡Lote de {total_cargados} fotos procesado con éxito!</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(f"✅ **1. Fotos cargadas:** {total_cargados} listas")
+                st.markdown("🔄 **2. Procesamiento IA:** Listo para iniciar")
+                st.markdown("⬜ **3. Resultados listos:** Pendiente")
+                st.markdown(
+                    f'<div class="semaforo-box semaforo-verde" style="margin-top: 10px;">🟢 {total_cargados} fotos cargadas, listas para procesar</div>',
+                    unsafe_allow_html=True,
+                )
 
-            # Botón para procesar TODO el lote sin recortes arbitrarios
-            if st.button(
-                f"🤖 PROCESAR LAS {total_cargados} FOTOS CARGADAS"
-            ):
+            if st.button(f"🤖 PROCESAR LAS {total_cargados} FOTOS CARGADAS"):
+                st.session_state.lote_procesado_exitoso = False
                 barra_progreso = st.progress(0)
                 total_archivos = len(archivos_lote)
                 procesados_exito = 0
 
                 st.markdown(
-                    '<div class="semaforo-box semaforo-amarillo">🟡 Estado: Procesando lote completo con IA...</div>',
+                    '<div class="semaforo-box semaforo-amarillo" style="margin-top: 10px;">🟡 Procesando lote completo con IA...</div>',
                     unsafe_allow_html=True,
                 )
 
@@ -388,9 +405,7 @@ with st.sidebar:
                         img_bytes = archivo_item.getvalue()
                         res_json = procesar_bytes_planilla_con_ia(img_bytes)
 
-                        time.sleep(
-                            2
-                        )  # Breve pausa para estabilidad en conexiones móviles
+                        time.sleep(2)
 
                         if res_json:
                             cabe_lote = res_json.get("cabecera", {})
@@ -412,12 +427,8 @@ with st.sidebar:
                                 "Maíz": "MBI",
                                 "COD MAIZ SAP": "MBI(12202968)",
                                 "N° Vehículos Analizados": 1,
-                                "Centros Externos": cabe_lote.get(
-                                    "procedencia", "PROVECESA"
-                                ),
-                                "Analista": cabe_lote.get(
-                                    "analista", "Automático"
-                                ),
+                                "Centros Externos": cabe_lote.get("procedencia", "PROVECESA"),
+                                "Analista": cabe_lote.get("analista", "Automático"),
                                 "Placa": cabe_lote.get("placa", "N/D"),
                                 "Silo": cabe_lote.get("silo", "N/D"),
                                 "Destino": cabe_lote.get("destino", "N/D"),
@@ -430,16 +441,13 @@ with st.sidebar:
                             st.session_state.historico.append(nuevo_registro)
                             procesados_exito += 1
                     except Exception as ex:
-                        st.error(
-                            f"Error en archivo {archivo_item.name}: {ex}"
-                        )
+                        st.error(f"Error en archivo {archivo_item.name}: {ex}")
 
                     barra_progreso.progress((i + 1) / total_archivos)
 
                 if procesados_exito > 0:
-                    st.success(
-                        f"¡Lote procesado con éxito! Se sumaron {procesados_exito} registros al reporte general."
-                    )
+                    st.session_state.lote_procesado_exitoso = True
+                    st.success(f"¡Lote procesado con éxito! Se sumaron {procesados_exito} registros.")
                     st.rerun()
 
     st.divider()
@@ -448,6 +456,7 @@ with st.sidebar:
     if st.button("🧹 Limpiar Registro Actual (Borrar Acumulado)"):
         st.session_state.historico = []
         st.session_state.datos_ia = {}
+        st.session_state.lote_procesado_exitoso = False
         st.success("¡Registro acumulado limpiado con éxito!")
         st.rerun()
 
