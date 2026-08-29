@@ -156,7 +156,8 @@ if "lote_procesado_exitoso" not in st.session_state:
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    # Actualizado al modelo actual compatible
+    model = genai.GenerativeModel("gemini-2.0-flash")
 except Exception as e:
     st.error(f"Error de configuración (Verifica tus secrets.toml): {e}")
 
