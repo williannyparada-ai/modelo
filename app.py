@@ -156,7 +156,7 @@ if "lote_procesado_exitoso" not in st.session_state:
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-3.6-flash")
+    model = genai.GenerativeModel("gemini-2.5-flash")
 except Exception as e:
     st.error(f"Error de configuración (Verifica tus secrets.toml): {e}")
 
@@ -386,9 +386,10 @@ with st.sidebar:
                 st.markdown("✅ **2. Procesamiento IA:** Finalizado")
                 st.markdown("✅ **3. Resultados listos:** Disponibles en reporte")
                 st.markdown(
-                    f'<div class="semaforo-box semaforo-verde" style="margin-top: 10px;">🟢 ¡Lote de {total_cargados} fotos procesado con éxito!</div>',
+                    f'<div class="semaforo-box semaforo-verde" style="margin-top: 10px;">🟢 ¡Lote procesado con éxito!</div>',
                     unsafe_allow_html=True,
                 )
+                st.success("Las fotos de este lote ya fueron procesadas y agregadas al reporte general.")
             else:
                 st.markdown(f"✅ **1. Fotos cargadas:** {total_cargados} listas")
                 st.markdown("🔄 **2. Procesamiento IA:** Listo para iniciar")
@@ -398,66 +399,73 @@ with st.sidebar:
                     unsafe_allow_html=True,
                 )
 
-            if st.button(f"🤖 PROCESAR LAS {total_cargados} FOTOS CARGADAS"):
-                st.session_state.lote_procesado_exitoso = False
-                barra_progreso = st.progress(0)
-                total_archivos = len(archivos_lote)
-                procesados_exito = 0
+                if st.button(f"🤖 PROCESAR LAS {total_cargados} FOTOS CARGADAS"):
+                    barra_progreso = st.progress(0)
+                    total_archivos = len(archivos_lote)
+                    procesados_exito = 0
 
-                st.markdown(
-                    '<div class="semaforo-box semaforo-amarillo" style="margin-top: 10px;">🟡 Procesando lote completo con IA...</div>',
-                    unsafe_allow_html=True,
-                )
+                    st.markdown(
+                        '<div class="semaforo-box semaforo-amarillo" style="margin-top: 10px;">🟡 Procesando lote completo con IA...</div>',
+                        unsafe_allow_html=True,
+                    )
 
-                for i, archivo_item in enumerate(archivos_lote):
-                    try:
-                        img_bytes = archivo_item.getvalue()
-                        res_json = procesar_bytes_planilla_con_ia(img_bytes)
+                    for i, archivo_item in enumerate(archivos_lote):
+                        try:
+                            img_bytes = archivo_item.getvalue()
+                            if not img_bytes:
+                                continue
 
-                        time.sleep(2)
+                            res_json = procesar_bytes_planilla_con_ia(img_bytes)
 
-                        if res_json:
-                            cabe_lote = res_json.get("cabecera", {})
-                            items_lote = res_json.get("items", {})
+                            if res_json:
+                                cabe_lote = res_json.get("cabecera", {})
+                                items_lote = res_json.get("items", {})
 
-                            vals_lote = {}
-                            for idx_item in range(20):
-                                k_str = str(idx_item + 1).zfill(2)
-                                try:
-                                    val_L = float(items_lote.get(k_str, 0.0))
-                                except:
-                                    val_L = 0.0
-                                vals_lote[nombres_items[idx_item]] = val_L
+                                vals_lote = {}
+                                for idx_item in range(20):
+                                    k_str = str(idx_item + 1).zfill(2)
+                                    try:
+                                        val_L = float(items_lote.get(k_str, 0.0))
+                                    except:
+                                        val_L = 0.0
+                                    vals_lote[nombres_items[idx_item]] = val_L
 
-                            nuevo_registro = {
-                                "Estado": cabe_lote.get("estado", ""),
-                                "Fecha": datetime.now().strftime("%Y-%m-%d"),
-                                "Contrato": cabe_lote.get("contrato", "0"),
-                                "Maíz": "MBI",
-                                "COD MAIZ SAP": "MBI(12202968)",
-                                "N° Vehículos Analizados": 1,
-                                "Centros Externos": cabe_lote.get("procedencia", "PROVECESA"),
-                                "Analista": cabe_lote.get("analista", "Automático"),
-                                "Placa": cabe_lote.get("placa", "N/D"),
-                                "Silo": cabe_lote.get("silo", "N/D"),
-                                "Destino": cabe_lote.get("destino", "N/D"),
-                                "Documento": cabe_lote.get("documento", "N/D"),
-                                "Cereal": "Maíz Blanco",
-                                "Origen": "Nacional",
-                                **vals_lote,
-                                "Estatus": "Aprobado",
-                            }
-                            st.session_state.historico.append(nuevo_registro)
-                            procesados_exito += 1
-                    except Exception as ex:
-                        st.error(f"Error en archivo {archivo_item.name}: {ex}")
+                                nuevo_registro = {
+                                    "Estado": cabe_lote.get("estado", ""),
+                                    "Fecha": datetime.now().strftime("%Y-%m-%d"),
+                                    "Contrato": cabe_lote.get("contrato", "0"),
+                                    "Maíz": "MBI",
+                                    "COD MAIZ SAP": "MBI(12202968)",
+                                    "N° Vehículos Analizados": 1,
+                                    "Centros Externos": cabe_lote.get("procedencia", "PROVECESA"),
+                                    "Analista": cabe_lote.get("analista", "Automático"),
+                                    "Placa": cabe_lote.get("placa", "N/D"),
+                                    "Silo": cabe_lote.get("silo", "N/D"),
+                                    "Destino": cabe_lote.get("destino", "N/D"),
+                                    "Documento": cabe_lote.get("documento", "N/D"),
+                                    "Cereal": "Maíz Blanco",
+                                    "Origen": "Nacional",
+                                    **vals_lote,
+                                    "Estatus": "Aprobado",
+                                }
+                                st.session_state.historico.append(nuevo_registro)
+                                procesados_exito += 1
 
-                    barra_progreso.progress((i + 1) / total_archivos)
+                            # Pausa obligatoria de 4 segundos para evitar el error 429
+                            time.sleep(4)
 
-                if procesados_exito > 0:
-                    st.session_state.lote_procesado_exitoso = True
-                    st.success(f"¡Lote procesado con éxito! Se sumaron {procesados_exito} registros.")
-                    st.rerun()
+                        except Exception as ex:
+                            if "429" in str(ex) or "ResourceExhausted" in str(ex):
+                                st.error("⚠️ Se alcanzó el límite de la API (Error 429). Espera 1 minuto antes de procesar más fotos.")
+                            else:
+                                st.warning(f"Incidencia en archivo {archivo_item.name}: {ex}")
+
+                        barra_progreso.progress((i + 1) / total_archivos)
+
+                    if procesados_exito > 0:
+                        st.session_state.lote_procesado_exitoso = True
+                        st.success(f"¡Lote completado! Se procesaron {procesados_exito} de {total_archivos} fotos.")
+                        st.rerun()
 
     st.divider()
 
