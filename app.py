@@ -4,7 +4,7 @@ import json
 import time
 from urllib.parse import quote
 import google.generativeai as genai
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageOps, ImageDraw, ImageFont
 import pandas as pd
 import streamlit as st
 
@@ -154,7 +154,29 @@ except Exception as e:
     st.error(f"Error de configuración (Verifica tus secrets.toml): {e}")
 
 
-# --- FUNCIÓN GENERADORA DE IMAGEN MEJORADA ---
+# --- FUNCIÓN DE OPTIMIZACIÓN DE IMAGEN PARA CELULARES ---
+def optimizar_imagen_para_ia(imagen_pil):
+    """Corrige la orientación EXIF, redimensiona y optimiza para la IA."""
+    try:
+        imagen_pil = ImageOps.exif_transpose(imagen_pil)
+    except Exception:
+        pass
+
+    if imagen_pil.mode != "RGB":
+        imagen_pil = imagen_pil.convert("RGB")
+
+    max_ancho = 1200
+    if imagen_pil.width > max_ancho:
+        proporcion = max_ancho / float(imagen_pil.width)
+        nuevo_alto = int(float(imagen_pil.height) * float(proporcion))
+        imagen_pil = imagen_pil.resize(
+            (max_ancho, nuevo_alto), Image.Resampling.LANCZOS
+        )
+
+    return imagen_pil
+
+
+# --- FUNCIÓN GENERADORA DE INFOGRAFÍA ---
 def generar_reporte_infografia(df):
     promedios = df.mean(numeric_only=True)
 
@@ -202,38 +224,19 @@ def generar_reporte_infografia(df):
     return buffer.getvalue()
 
 
-# --- FUNCIÓN DE LECTURA (INDIVIDUAL) ---
-def procesar_planilla_con_ia(archivo):
-    try:
-        imagen_pil = Image.open(archivo).convert("RGB")
-        img_byte_arr = io.BytesIO()
-        imagen_pil.save(img_byte_arr, format="JPEG")
-        img_bytes = img_byte_arr.getvalue()
-
-        prompt = """Analiza la planilla y extrae los datos. Devuelve un JSON sin formato Markdown.
-        Formato: {"cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "documento": "", "estado": ""},
-        "items": {"01": 0.0, "02": 0.0, "03": 0.0, "04": 0.0, "05": 0.0, "06": 0.0, "07": 0.0, "08": 0.0, "09": 0.0, "10": 0.0, "11": 0.0, "12": 0.0, "13": 0.0, "14": 0.0, "15": 0.0, "16": 0.0, "17": 0.0, "18": 0.0, "19": 0.0, "20": 0.0}}"""
-
-        response = model.generate_content(
-            [prompt, {"mime_type": "image/jpeg", "data": img_bytes}]
-        )
-        texto = response.text.replace("```json", "").replace("```", "").strip()
-        inicio, fin = texto.find("{"), texto.rfind("}") + 1
-        return json.loads(texto[inicio:fin])
-    except Exception as e:
-        st.error(f"Error técnico: {e}")
-        return None
-
-
-# --- FUNCIÓN DE LECTURA EN BLOQUE ---
+# --- FUNCIÓN DE LECTURA POR BLOQUES (CON OPTIMIZACIÓN) ---
 def procesar_bytes_planilla_con_ia(img_bytes):
     try:
-        imagen_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+        imagen_pil = Image.open(io.BytesIO(img_bytes))
+        imagen_pil = optimizar_imagen_para_ia(imagen_pil)
+
         img_byte_arr = io.BytesIO()
-        imagen_pil.save(img_byte_arr, format="JPEG")
+        imagen_pil.save(img_byte_arr, format="JPEG", quality=85)
         img_bytes_limpios = img_byte_arr.getvalue()
 
-        prompt = """Analiza la imagen de esta planilla de laboratorio agroindustrial. Extrae la información disponible de los campos de cabecera (incluyendo 'estado' si aparece geográficamente) y los 20 ítems numéricos de laboratorio. 
+        prompt = """Analiza la imagen de esta planilla de laboratorio agroindustrial. La foto fue tomada con un teléfono móvil, por lo que puede tener ligeras sombras o inclinaciones. Extrae la información disponible de los campos de cabecera y los 20 ítems numéricos. 
+        Si algún campo numérico no se lee con claridad absoluta, estima el valor más lógico o coloca 0.0. Si un campo de texto no se ve, déjalo como cadena vacía ("").
+        
         Devuelve ÚNICAMENTE un objeto JSON válido sin bloques de código ni texto adicional, respetando exactamente esta estructura:
         {
           "cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "documento": "", "estado": ""},
@@ -254,6 +257,16 @@ def procesar_bytes_planilla_con_ia(img_bytes):
         return None
     except Exception as e:
         raise e
+
+
+# --- FUNCIÓN DE LECTURA (INDIVIDUAL) ---
+def procesar_planilla_con_ia(archivo):
+    try:
+        img_bytes = archivo.read()
+        return procesar_bytes_planilla_con_ia(img_bytes)
+    except Exception as e:
+        st.error(f"Error técnico procesando la imagen: {e}")
+        return None
 
 
 # --- 1. RESUMEN DE JORNADA Y TENDENCIAS ---
