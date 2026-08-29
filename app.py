@@ -15,11 +15,10 @@ st.set_page_config(
     page_icon="🌾",
 )
 
-# --- ESTILOS CSS PERSONALIZADOS (Encabezado Ajustado y Letras Más Grandes) ---
+# --- ESTILOS CSS PERSONALIZADOS (Encabezado y Semáforo Visual) ---
 st.markdown(
     """
     <style>
-        /* Fondo general de la aplicación suave y elegante */
         .stApp {
             background-color: #F4F6F9;
         }
@@ -32,7 +31,6 @@ st.markdown(
             --border-color: #D1D8E0;
         }
         
-        /* Cabecera corporativa compacta, elegante y con fuente más grande */
         .header-corp-card {
             background: var(--bg-card);
             padding: 18px 25px;
@@ -60,7 +58,6 @@ st.markdown(
             border-radius: 8px;
         }
 
-        /* Encabezados de sección estilizados y más grandes */
         .section-header {
             font-size: 20px;
             color: var(--primary-blue);
@@ -71,13 +68,11 @@ st.markdown(
             font-weight: 700;
         }
 
-        /* Aumento general de tamaño de letra en textos y etiquetas */
         p, span, label, .stTextInput label, .stNumberInput label {
             font-size: 16px !important;
             color: var(--text-main);
         }
 
-        /* Tarjetas de métricas */
         [data-testid="stMetric"] {
             background-color: #FFFFFF;
             padding: 15px;
@@ -86,7 +81,6 @@ st.markdown(
             border: 1px solid var(--border-color);
         }
 
-        /* Botones principales con efecto hover */
         .stButton>button {
             border-radius: 8px;
             font-weight: 600;
@@ -99,6 +93,20 @@ st.markdown(
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(0, 70, 127, 0.2);
         }
+
+        .semaforo-box {
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .semaforo-rojo { background-color: #FADBD8; color: #78281F; border: 1px solid #F5B7B1; }
+        .semaforo-amarillo { background-color: #FCF3CF; color: #7D6608; border: 1px solid #F9E79F; }
+        .semaforo-verde { background-color: #D4EFDF; color: #145A32; border: 1px solid #A9DFBF; }
     </style>
 """,
     unsafe_allow_html=True,
@@ -115,7 +123,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Etiquetas para resultados
 nombres_items = [
     "Humedad",
     "Impureza",
@@ -139,13 +146,11 @@ nombres_items = [
     "Fumonisina",
 ]
 
-# Inicialización de estado para acumulación persistente
 if "historico" not in st.session_state:
     st.session_state.historico = []
 if "datos_ia" not in st.session_state:
     st.session_state.datos_ia = {}
 
-# --- CONFIGURACIÓN IA CORREGIDA ---
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
@@ -154,17 +159,13 @@ except Exception as e:
     st.error(f"Error de configuración (Verifica tus secrets.toml): {e}")
 
 
-# --- FUNCIÓN DE OPTIMIZACIÓN DE IMAGEN PARA CELULARES ---
 def optimizar_imagen_para_ia(imagen_pil):
-    """Corrige la orientación EXIF, redimensiona y optimiza para la IA."""
     try:
         imagen_pil = ImageOps.exif_transpose(imagen_pil)
     except Exception:
         pass
-
     if imagen_pil.mode != "RGB":
         imagen_pil = imagen_pil.convert("RGB")
-
     max_ancho = 1200
     if imagen_pil.width > max_ancho:
         proporcion = max_ancho / float(imagen_pil.width)
@@ -172,14 +173,11 @@ def optimizar_imagen_para_ia(imagen_pil):
         imagen_pil = imagen_pil.resize(
             (max_ancho, nuevo_alto), Image.Resampling.LANCZOS
         )
-
     return imagen_pil
 
 
-# --- FUNCIÓN GENERADORA DE INFOGRAFÍA ---
 def generar_reporte_infografia(df):
     promedios = df.mean(numeric_only=True)
-
     img = Image.new("RGB", (800, 1100), color=(255, 255, 255))
     draw = ImageDraw.Draw(img)
 
@@ -218,13 +216,11 @@ def generar_reporte_infografia(df):
     draw.text(
         (300, 1050), f"Vehículos analizados: {len(df)}", fill=(0, 70, 127)
     )
-
     buffer = io.BytesIO()
     img.save(buffer, format="PNG")
     return buffer.getvalue()
 
 
-# --- FUNCIÓN DE LECTURA POR BLOQUES (CON OPTIMIZACIÓN) ---
 def procesar_bytes_planilla_con_ia(img_bytes):
     try:
         imagen_pil = Image.open(io.BytesIO(img_bytes))
@@ -259,7 +255,6 @@ def procesar_bytes_planilla_con_ia(img_bytes):
         raise e
 
 
-# --- FUNCIÓN DE LECTURA (INDIVIDUAL) ---
 def procesar_planilla_con_ia(archivo):
     try:
         img_bytes = archivo.read()
@@ -302,7 +297,6 @@ if st.session_state.historico:
         "📈 Ver Gráficos de Tendencia (Acumulado de la Jornada)", expanded=False
     ):
         c1, c2 = st.columns(2)
-
         with c1:
             st.caption("Tendencia de Humedad")
             st.line_chart(df_hist["Humedad"], use_container_width=True)
@@ -310,7 +304,6 @@ if st.session_state.historico:
             st.line_chart(
                 df_hist["Aflatoxina"], color="#FFA07A", use_container_width=True
             )
-
         with c2:
             st.caption("Tendencia de Granos Dañados Totales (GDT)")
             st.line_chart(
@@ -323,7 +316,7 @@ if st.session_state.historico:
 
     st.divider()
 
-# --- 2. SIDEBAR ---
+# --- 2. SIDEBAR CON SEMÁFORO VISUAL ---
 with st.sidebar:
     st.header("📸 Escáner por Lotes")
 
@@ -331,15 +324,32 @@ with st.sidebar:
 
     if modo_carga == "Individual":
         archivo = st.file_uploader("Subir foto", type=["jpg", "png", "jpeg"])
+
+        if archivo is None:
+            st.markdown(
+                '<div class="semaforo-box semaforo-rojo">🔴 Estado: Esperando foto (Sube una imagen)</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<div class="semaforo-box semaforo-verde">🟢 Estado: Foto cargada y lista para procesar</div>',
+                unsafe_allow_html=True,
+            )
+
         if archivo and st.button("🤖 LEER PLANILLA"):
-            with st.spinner("Procesando..."):
+            st.markdown(
+                '<div class="semaforo-box semaforo-amarillo">🟡 Estado: Analizando planilla con IA...</div>',
+                unsafe_allow_html=True,
+            )
+            with st.spinner("Procesando imagen..."):
                 resultado = procesar_planilla_con_ia(archivo)
                 if resultado:
                     st.session_state.datos_ia = resultado
+                    st.success("¡Lectura exitosa!")
                     st.rerun()
     else:
         st.info(
-            "Sube tus lotes progresivamente (ej. 5 fotos, luego 10 más). Se acumularán automáticamente."
+            "Sube tus fotos de golpe. Todas las que selecciones se procesarán automáticamente una por una."
         )
         archivos_lote = st.file_uploader(
             "Subir fotos de vehículos",
@@ -348,24 +358,39 @@ with st.sidebar:
             key="uploader_lotes",
         )
 
-        if archivos_lote:
+        if not archivos_lote:
+            st.markdown(
+                '<div class="semaforo-box semaforo-rojo">🔴 Estado: Esperando lote de fotos</div>',
+                unsafe_allow_html=True,
+            )
+        else:
             total_cargados = len(archivos_lote)
-            st.caption(
-                f"📁 Archivos cargados en este selector: {total_cargados} fotos."
+            st.markdown(
+                f'<div class="semaforo-box semaforo-verde">🟢 Estado: {total_cargados} fotos cargadas, listas para procesar</div>',
+                unsafe_allow_html=True,
             )
 
-            if st.button("🤖 PROCESAR LOTE CARGADO (Bloques de 5 recomendados)"):
-                lote_a_procesar = archivos_lote[:5]
+            # Botón para procesar TODO el lote sin recortes arbitrarios
+            if st.button(
+                f"🤖 PROCESAR LAS {total_cargados} FOTOS CARGADAS"
+            ):
                 barra_progreso = st.progress(0)
-                total_archivos = len(lote_a_procesar)
+                total_archivos = len(archivos_lote)
                 procesados_exito = 0
 
-                for i, archivo_item in enumerate(lote_a_procesar):
+                st.markdown(
+                    '<div class="semaforo-box semaforo-amarillo">🟡 Estado: Procesando lote completo con IA...</div>',
+                    unsafe_allow_html=True,
+                )
+
+                for i, archivo_item in enumerate(archivos_lote):
                     try:
                         img_bytes = archivo_item.getvalue()
                         res_json = procesar_bytes_planilla_con_ia(img_bytes)
 
-                        time.sleep(3)  # Pausa prudente anti-saturación
+                        time.sleep(
+                            2
+                        )  # Breve pausa para estabilidad en conexiones móviles
 
                         if res_json:
                             cabe_lote = res_json.get("cabecera", {})
@@ -387,8 +412,12 @@ with st.sidebar:
                                 "Maíz": "MBI",
                                 "COD MAIZ SAP": "MBI(12202968)",
                                 "N° Vehículos Analizados": 1,
-                                "Centros Externos": cabe_lote.get("procedencia", "PROVECESA"),
-                                "Analista": cabe_lote.get("analista", "Automático"),
+                                "Centros Externos": cabe_lote.get(
+                                    "procedencia", "PROVECESA"
+                                ),
+                                "Analista": cabe_lote.get(
+                                    "analista", "Automático"
+                                ),
                                 "Placa": cabe_lote.get("placa", "N/D"),
                                 "Silo": cabe_lote.get("silo", "N/D"),
                                 "Destino": cabe_lote.get("destino", "N/D"),
@@ -400,18 +429,16 @@ with st.sidebar:
                             }
                             st.session_state.historico.append(nuevo_registro)
                             procesados_exito += 1
-                        else:
-                            st.warning(
-                                f"La IA no devolvió estructura en: {archivo_item.name}"
-                            )
                     except Exception as ex:
-                        st.error(f"Error en {archivo_item.name}: {ex}")
+                        st.error(
+                            f"Error en archivo {archivo_item.name}: {ex}"
+                        )
 
                     barra_progreso.progress((i + 1) / total_archivos)
 
                 if procesados_exito > 0:
                     st.success(
-                        f"¡Lote procesado con éxito! Se acumularán {procesados_exito} registros. Total acumulado: {len(st.session_state.historico)}"
+                        f"¡Lote procesado con éxito! Se sumaron {procesados_exito} registros al reporte general."
                     )
                     st.rerun()
 
@@ -509,7 +536,6 @@ if st.session_state.historico:
 
     def generar_reporte_profesional(df):
         promedios = df.mean(numeric_only=True)
-
         ultimo = df.iloc[-1]
         analista = ultimo.get("Analista", "Analista Calidad")
         silo = ultimo.get("Centros Externos", "PROVECESA")
@@ -551,38 +577,31 @@ if st.session_state.historico:
 
         aprobados = len(df[df["Estatus"] == "Aprobado"])
         rechazados = len(df[df["Estatus"] == "Rechazado"])
-
         if aprobados > 0:
             reporte += f"✅ {aprobados} vehículos despachados.\n"
         if rechazados > 0:
             reporte += f"❌ {rechazados} vehículos rechazados.\n"
-
         return reporte
 
     reporte_final = generar_reporte_profesional(
         pd.DataFrame(st.session_state.historico)
     )
     st.code(reporte_final, language="text")
-
     link_wa = f"https://wa.me/?text={quote(reporte_final)}"
     st.link_button("🚀 Enviar por WhatsApp", url=link_wa)
-
 else:
     st.info("Aún no hay datos acumulados para generar el reporte.")
 
 # --- 4. EXCEL MULTI-HOJA Y REPORTE VISUAL ---
 if st.session_state.historico:
     st.divider()
-
     df = pd.DataFrame(st.session_state.historico)
     buffer_xls = io.BytesIO()
 
     with pd.ExcelWriter(buffer_xls, engine="xlsxwriter") as writer:
         df.to_excel(writer, sheet_name="Detalle", index=False)
-
         if not df.empty:
             columnas_numericas = [col for col in nombres_items if col in df.columns]
-
             agrupacion_cols = ["Fecha", "Centros Externos", "Cereal", "Origen"]
             agrupacion_cols = [c for c in agrupacion_cols if c in df.columns]
 
@@ -600,7 +619,6 @@ if st.session_state.historico:
             else:
                 df_resumen = df[columnas_numericas].mean().to_frame().T
                 df_resumen["N° Vehículos Analizados"] = len(df)
-
             df_resumen.to_excel(writer, sheet_name="Resumen por Día", index=False)
 
     st.download_button(
