@@ -351,6 +351,10 @@ with st.sidebar:
                     st.rerun()
     else:
         st.info("Sube tus fotos de golpe. Se procesarán todas de forma continua.")
+        
+        if "ultimo_conteo_lote" not in st.session_state:
+            st.session_state.ultimo_conteo_lote = 0
+
         archivos_lote = st.file_uploader(
             "Subir fotos de vehículos",
             type=["jpg", "png", "jpeg"],
@@ -358,10 +362,15 @@ with st.sidebar:
             key="uploader_lotes",
         )
 
+        if archivos_lote and len(archivos_lote) != st.session_state.ultimo_conteo_lote:
+            st.session_state.ultimo_conteo_lote = len(archivos_lote)
+            st.session_state.lote_procesado_exitoso = False
+
         # --- CHECKLIST VISUAL DE PROGRESO ---
         st.markdown("### 📋 Estado del Proceso")
         
         if not archivos_lote:
+            st.session_state.ultimo_conteo_lote = 0
             st.markdown("⬜ **1. Fotos cargadas:** Pendiente")
             st.markdown("⬜ **2. Procesamiento IA:** En espera")
             st.markdown("⬜ **3. Resultados listos:** Pendiente")
@@ -457,6 +466,7 @@ with st.sidebar:
         st.session_state.historico = []
         st.session_state.datos_ia = {}
         st.session_state.lote_procesado_exitoso = False
+        st.session_state.ultimo_conteo_lote = 0
         st.success("¡Registro acumulado limpiado con éxito!")
         st.rerun()
 
