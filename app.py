@@ -260,12 +260,12 @@ Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
         },
     }
 
-    # Reintentos automáticos si la API devuelve 503 u otro error temporal
-    max_intentos = 3
+    # Estrategia de Reintentos (Exponential Backoff) para mitigar errores 503
+    max_intentos = 5
     for intento in range(max_intentos):
         try:
             response = client.models.generate_content(
-                model="gemini-3.6-flash",  # Modelo actualizado
+                model="gemini-1.5-flash",  # Modelo de alta disponibilidad
                 contents=[
                     prompt,
                     types.Part.from_bytes(
@@ -279,9 +279,9 @@ Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
             )
             return json.loads(response.text)
         except Exception as e:
-            if "503" in str(e) or "UNAVAILABLE" in str(e):
+            if "503" in str(e) or "UNAVAILABLE" in str(e) or "429" in str(e):
                 if intento < max_intentos - 1:
-                    time.sleep(4 * (intento + 1))
+                    time.sleep(5 * (intento + 1))  # Esperas de 5s, 10s, 15s, 20s
                     continue
             raise e
 
@@ -493,8 +493,8 @@ with st.sidebar:
                                 )
                                 procesados_exito += 1
 
-                            # Pausa breve de 2s entre lecturas para no saturar la API
-                            time.sleep(2)
+                            # Pausa prudencial entre peticiones para evitar saturar el servidor
+                            time.sleep(3)
 
                         except Exception as ex:
                             st.warning(f"Incidencia en {archivo_item.name}: {ex}")
@@ -529,21 +529,18 @@ with st.form("registro_maestro"):
         unsafe_allow_html=True,
     )
 
-    # Fila 1: 4 columnas para la primera línea de la cabecera
     c1, c2, c3, c4 = st.columns(4)
     f_procedencia = c1.text_input("Procedencia", value="Silos Xeax")
     f_destino = c2.text_input("Destino", value="APC Chivacoa")
     f_estado = c3.text_input("Estado", value=cabe.get("estado", ""))
     f_fecha = c4.date_input("Fecha", datetime.now())
 
-    # Fila 2: 4 columnas para los identificadores del vehículo
     c5, c6, c7, c8 = st.columns(4)
     f_contrato = c5.text_input("N° de Contrato", value=cabe.get("contrato", ""))
     f_placa = c6.text_input("Placa de Vehículo", value=cabe.get("placa", ""))
     f_silo = c7.text_input("Silo", value=cabe.get("silo", ""))
     f_doc = c8.text_input("Documento", value=cabe.get("documento", ""))
 
-    # Fila 3: Analista manual
     f_analista = st.text_input("Analista de Calidad", value="Terry Silva")
 
     st.markdown(
