@@ -216,15 +216,14 @@ def generar_reporte_infografia(df):
 
 
 def procesar_bytes_planilla_con_ia(img_bytes):
-    try:
-        imagen_pil = Image.open(io.BytesIO(img_bytes))
-        imagen_pil = optimizar_imagen_para_ia(imagen_pil)
+    imagen_pil = Image.open(io.BytesIO(img_bytes))
+    imagen_pil = optimizar_imagen_para_ia(imagen_pil)
 
-        img_byte_arr = io.BytesIO()
-        imagen_pil.save(img_byte_arr, format="JPEG", quality=85)
-        img_bytes_limpios = img_byte_arr.getvalue()
+    img_byte_arr = io.BytesIO()
+    imagen_pil.save(img_byte_arr, format="JPEG", quality=85)
+    img_bytes_limpios = img_byte_arr.getvalue()
 
-        prompt = """Analiza la imagen de la planilla de calidad de Alimentos Polar.
+    prompt = """Analiza la imagen de la planilla de calidad de Alimentos Polar.
 Extrae la información únicamente de los siguientes campos de cabecera:
 - placa: PLACA DE VEHÍCULO
 - silo: SILO
@@ -238,46 +237,53 @@ La Fumonisina NO está en la tabla numerada, sino escrita a mano en la sección 
 
 Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
 
-        schema = {
-            "type": "OBJECT",
-            "properties": {
-                "cabecera": {
-                    "type": "OBJECT",
-                    "properties": {
-                        "placa": {"type": "STRING"},
-                        "silo": {"type": "STRING"},
-                        "contrato": {"type": "STRING"},
-                        "documento": {"type": "STRING"},
-                        "estado": {"type": "STRING"},
-                    },
-                },
-                "items": {
-                    "type": "OBJECT",
-                    "properties": {
-                        f"{str(i).zfill(2)}": {"type": "NUMBER"}
-                        for i in range(1, 21)
-                    },
+    schema = {
+        "type": "OBJECT",
+        "properties": {
+            "cabecera": {
+                "type": "OBJECT",
+                "properties": {
+                    "placa": {"type": "STRING"},
+                    "silo": {"type": "STRING"},
+                    "contrato": {"type": "STRING"},
+                    "documento": {"type": "STRING"},
+                    "estado": {"type": "STRING"},
                 },
             },
-        }
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    f"{str(i).zfill(2)}": {"type": "NUMBER"}
+                    for i in range(1, 21)
+                },
+            },
+        },
+    }
 
-        response = client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=[
-                prompt,
-                types.Part.from_bytes(
-                    data=img_bytes_limpios, mime_type="image/jpeg"
+    # Reintentos automáticos si el servidor devuelve 503 u otro error temporal
+    max_intentos = 3
+    for intento in range(max_intentos):
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[
+                    prompt,
+                    types.Part.from_bytes(
+                        data=img_bytes_limpios, mime_type="image/jpeg"
+                    ),
+                ],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=schema,
                 ),
-            ],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=schema,
-            ),
-        )
-
-        return json.loads(response.text)
-    except Exception as e:
-        raise e
+            )
+            return json.loads(response.text)
+        except Exception as e:
+            if "503" in str(e) or "UNAVAILABLE" in str(e):
+                if intento < max_intentos - 1:
+                    time.sleep(4 * (intento + 1))  # Espera progresiva: 4s, 8s
+                    continue
+            raise e
 
 
 def procesar_planilla_con_ia(archivo):
@@ -487,7 +493,8 @@ with st.sidebar:
                                 )
                                 procesados_exito += 1
 
-                            time.sleep(3)
+                            # Pausa breve entre imágenes para evitar saturación de la API
+                            time.sleep(2)
 
                         except Exception as ex:
                             st.warning(f"Incidencia en {archivo_item.name}: {ex}")
