@@ -267,12 +267,8 @@ Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
         },
     }
 
-    # Modelos actualizados y estables (se eliminó el sufijo -latest obsoleto)
-    modelos_a_probar = [
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-    ]
+    # Modelo estándar y actualizado para llamadas SDK google-genai
+    modelos_a_probar = ["gemini-2.5-flash", "gemini-flash"]
 
     ultimo_error = None
 
