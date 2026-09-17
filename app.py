@@ -260,14 +260,17 @@ Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
         },
     }
 
-    # Modelos a intentar en orden de preferencia
-    modelos_compatibles = ["gemini-2.5-flash", "gemini-1.5-flash-latest"]
+    # Nombres de modelos exactos compatibles con la API
+    modelos_candidatos = [
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash"
+    ]
     
-    max_intentos = 4
     ultimo_error = None
 
-    for model_name in modelos_compatibles:
-        for intento in range(max_intentos):
+    for model_name in modelos_candidatos:
+        for intento in range(3):
             try:
                 response = client.models.generate_content(
                     model=model_name,
@@ -286,15 +289,13 @@ Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
             except Exception as e:
                 ultimo_error = e
                 err_str = str(e)
-                # Si el modelo no existe (404), pasamos al siguiente modelo de la lista inmediatamente
+                # Si no encuentra el modelo, pasa inmediatamente al siguiente de la lista
                 if "404" in err_str or "NOT_FOUND" in err_str:
                     break
-                # Si hay saturación (503/429), esperamos antes de reintentar
+                # Si hay saturación o límite de peticiones, espera y reintenta
                 if "503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str:
-                    if intento < max_intentos - 1:
-                        time.sleep(3 * (intento + 1))
-                        continue
-                raise e
+                    time.sleep(4 * (intento + 1))
+                    continue
 
     if ultimo_error:
         raise ultimo_error
