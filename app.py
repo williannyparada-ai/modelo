@@ -260,36 +260,16 @@ Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
         },
     }
 
-    # Intentar obtener primero la lista de modelos activos reales de tu API Key
-    modelos_a_probar = []
-    try:
-        modelos_remotos = [
-            m.name for m in client.models.list() 
-            if hasattr(m, 'supported_generation_methods') and 'generateContent' in m.supported_generation_methods
-        ]
-        modelos_a_probar.extend(modelos_remotos)
-    except Exception:
-        pass
-
-    # Modelos fallback por defecto
-    modelos_a_probar.extend([
+    # Lista limpia de modelos activos oficiales para google-genai
+    modelos_a_probar = [
         "gemini-2.5-flash",
         "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "models/gemini-2.5-flash",
-        "models/gemini-2.0-flash",
-        "models/gemini-1.5-flash"
-    ])
-
-    # Eliminar duplicados manteniendo orden
-    modelos_unicos = []
-    for m in modelos_a_probar:
-        if m not in modelos_unicos:
-            modelos_unicos.append(m)
+        "gemini-1.5-flash-latest",
+    ]
 
     ultimo_error = None
 
-    for model_name in modelos_unicos:
+    for model_name in modelos_a_probar:
         try:
             response = client.models.generate_content(
                 model=model_name,
@@ -307,7 +287,6 @@ Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
             return json.loads(response.text)
         except Exception as e:
             ultimo_error = e
-            # Ante cualquier error de endpoint o modelo no encontrado, pasa silenciosamente al siguiente
             continue
 
     if ultimo_error:
@@ -522,7 +501,6 @@ with st.sidebar:
                                 procesados_exito += 1
 
                         except Exception as ex:
-                            # Ignora errores individuales y continua procesando
                             pass
 
                         barra_progreso.progress((i + 1) / total_cargados)
