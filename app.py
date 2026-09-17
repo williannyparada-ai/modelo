@@ -1,10 +1,12 @@
 from datetime import datetime
 import io
 import json
+import re
 import time
 from urllib.parse import quote
-import google.generativeai as genai
-from PIL import Image, ImageOps, ImageDraw, ImageFont
+from google import genai
+from google.genai import types
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 import pandas as pd
 import streamlit as st
 
@@ -15,14 +17,11 @@ st.set_page_config(
     page_icon="🌾",
 )
 
-# --- ESTILOS CSS PERSONALIZADOS (Encabezado y Semáforo Visual) ---
+# --- ESTILOS CSS PERSONALIZADOS ---
 st.markdown(
     """
     <style>
-        .stApp {
-            background-color: #F4F6F9;
-        }
-
+        .stApp { background-color: #F4F6F9; }
         :root {
             --primary-blue: #00467F;
             --secondary-blue: #0066B3;
@@ -30,7 +29,6 @@ st.markdown(
             --text-main: #2C3E50;
             --border-color: #D1D8E0;
         }
-        
         .header-corp-card {
             background: var(--bg-card);
             padding: 18px 25px;
@@ -57,7 +55,6 @@ st.markdown(
             padding: 6px 14px;
             border-radius: 8px;
         }
-
         .section-header {
             font-size: 20px;
             color: var(--primary-blue);
@@ -67,12 +64,10 @@ st.markdown(
             margin-bottom: 15px;
             font-weight: 700;
         }
-
         p, span, label, .stTextInput label, .stNumberInput label {
             font-size: 16px !important;
             color: var(--text-main);
         }
-
         [data-testid="stMetric"] {
             background-color: #FFFFFF;
             padding: 15px;
@@ -80,7 +75,6 @@ st.markdown(
             box-shadow: 0 4px 10px rgba(0,0,0,0.03);
             border: 1px solid var(--border-color);
         }
-
         .stButton>button {
             border-radius: 8px;
             font-weight: 600;
@@ -88,12 +82,10 @@ st.markdown(
             padding: 0.6rem 1rem;
             transition: all 0.3s ease;
         }
-        
         .stButton>button:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(0, 70, 127, 0.2);
         }
-
         .semaforo-box {
             padding: 10px 15px;
             border-radius: 8px;
@@ -143,7 +135,7 @@ nombres_items = [
     "Insectos V.",
     "Quemados",
     "Sensorial",
-    "Fumonisina",
+    "Fumonisina",  # Extraída desde Observaciones
 ]
 
 if "historico" not in st.session_state:
@@ -153,11 +145,10 @@ if "datos_ia" not in st.session_state:
 if "lote_procesado_exitoso" not in st.session_state:
     st.session_state.lote_procesado_exitoso = False
 
+# --- CONFIGURACIÓN DE CLIENTE GEMINI ---
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
-    genai.configure(api_key=api_key)
-    # Actualizado al modelo requerido por la API
-    model = genai.GenerativeModel("gemini-3.6-flash")
+    client = genai.Client(api_key=api_key)
 except Exception as e:
     st.error(f"Error de configuración (Verifica tus secrets.toml): {e}")
 
@@ -193,7 +184,7 @@ def generar_reporte_infografia(df):
         logo = logo.resize((w_max, h_nuevo), Image.LANCZOS)
         img.paste(logo, (250, 30), logo)
         y_titulo = 30 + h_nuevo + 30
-    except Exception as e:
+    except Exception:
         draw.text((250, 50), "EMPRESAS POLAR", fill=(0, 70, 127))
         y_titulo = 200
 
@@ -233,27 +224,60 @@ def procesar_bytes_planilla_con_ia(img_bytes):
         imagen_pil.save(img_byte_arr, format="JPEG", quality=85)
         img_bytes_limpios = img_byte_arr.getvalue()
 
-        prompt = """Analiza la imagen de esta planilla de laboratorio agroindustrial. La foto fue tomada con un teléfono móvil, por lo que puede tener ligeras sombras o inclinaciones. Extrae la información disponible de los campos de cabecera y los 20 ítems numéricos. 
-        Si algún campo numérico no se lee con claridad absoluta, estima el valor más lógico o coloca 0.0. Si un campo de texto no se ve, déjalo como cadena vacía ("").
-        
-        Devuelve ÚNICAMENTE un objeto JSON válido sin bloques de código ni texto adicional, respetando exactamente esta estructura:
-        {
-          "cabecera": {"analista": "", "procedencia": "", "placa": "", "silo": "", "destino": "", "contrato": "", "documento": "", "estado": ""},
-          "items": {"01": 0.0, "02": 0.0, "03": 0.0, "04": 0.0, "05": 0.0, "06": 0.0, "07": 0.0, "08": 0.0, "09": 0.0, "10": 0.0, "11": 0.0, "12": 0.0, "13": 0.0, "14": 0.0, "15": 0.0, "16": 0.0, "17": 0.0, "18": 0.0, "19": 0.0, "20": 0.0}
-        }"""
+        # Prompt ajustado: No extrae Procedencia, Destino ni Analista.
+        # Extrae explícitamente Fumonisina del área de OBSERVACIONES.
+        prompt = """Analiza la imagen de la planilla de calidad de Alimentos Polar.
+Extrae la información únicamente de los siguientes campos de cabecera:
+- placa: PLACA DE VEHÍCULO
+- silo: SILO
+- contrato: N° DE CONTRATO
+- documento: DOCUMENTO
+- estado: ESTADO
 
-        response = model.generate_content(
-            [prompt, {"mime_type": "image/jpeg", "data": img_bytes_limpios}]
+Extrae los ítems numéricos del 01 al 19 según la tabla.
+MUY IMPORTANTE PARA EL ÍTEM 20 (Fumonisina):
+La Fumonisina NO está en la tabla numerada, sino escrita a mano en la sección inferior "OBSERVACIONES" (por ejemplo "Fumonisina 1,8 ppm"). Lee el área de OBSERVACIONES, extrae el número de la Fumonisina y asígnalo como valor flotante al ítem "20". Si no hay mención de Fumonisina, asigna 0.0.
+
+Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
+
+        schema = {
+            "type": "OBJECT",
+            "properties": {
+                "cabecera": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "placa": {"type": "STRING"},
+                        "silo": {"type": "STRING"},
+                        "contrato": {"type": "STRING"},
+                        "documento": {"type": "STRING"},
+                        "estado": {"type": "STRING"},
+                    },
+                },
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        f"{str(i).zfill(2)}": {"type": "NUMBER"}
+                        for i in range(1, 21)
+                    },
+                },
+            },
+        }
+
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                prompt,
+                types.Part.from_bytes(
+                    data=img_bytes_limpios, mime_type="image/jpeg"
+                ),
+            ],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=schema,
+            ),
         )
-        texto = (
-            response.text.replace("```json", "")
-            .replace("```", "")
-            .strip()
-        )
-        inicio, fin = texto.find("{"), texto.rfind("}") + 1
-        if inicio != -1 and fin != 0:
-            return json.loads(texto[inicio:fin])
-        return None
+
+        return json.loads(response.text)
     except Exception as e:
         raise e
 
@@ -305,16 +329,22 @@ if st.session_state.historico:
             st.line_chart(df_hist["Humedad"], use_container_width=True)
             st.caption("Tendencia de Aflatoxina (PPB)")
             st.line_chart(
-                df_hist["Aflatoxina"], color="#FFA07A", use_container_width=True
+                df_hist["Aflatoxina"],
+                color="#FFA07A",
+                use_container_width=True,
             )
         with c2:
             st.caption("Tendencia de Granos Dañados Totales (GDT)")
             st.line_chart(
-                df_hist["Total Dañados"], color="#90EE90", use_container_width=True
+                df_hist["Total Dañados"],
+                color="#90EE90",
+                use_container_width=True,
             )
             st.caption("Tendencia de Fumonisina (PPM)")
             st.line_chart(
-                df_hist["Fumonisina"], color="#BA55D3", use_container_width=True
+                df_hist["Fumonisina"],
+                color="#BA55D3",
+                use_container_width=True,
             )
 
     st.divider()
@@ -323,6 +353,12 @@ if st.session_state.historico:
 with st.sidebar:
     st.header("📸 Escáner por Lotes")
 
+    st.subheader("⚙️ Parámetros Fijos Manuales")
+    procedencia_lote = st.text_input("Procedencia (Lotes)", value="Silos Xeax")
+    destino_lote = st.text_input("Destino (Lotes)", value="APC Chivacoa")
+    analista_lote = st.text_input("Analista (Lotes)", value="Terry Silva")
+
+    st.divider()
     modo_carga = st.radio("Modo de escaneo:", ["Individual", "Lote de Fotos"])
 
     if modo_carga == "Individual":
@@ -330,18 +366,18 @@ with st.sidebar:
 
         if archivo is None:
             st.markdown(
-                '<div class="semaforo-box semaforo-rojo">🔴 Estado: Esperando foto (Sube una imagen)</div>',
+                '<div class="semaforo-box semaforo-rojo">🔴 Estado: Esperando foto</div>',
                 unsafe_allow_html=True,
             )
         else:
             st.markdown(
-                '<div class="semaforo-box semaforo-verde">🟢 Estado: Foto cargada y lista para procesar</div>',
+                '<div class="semaforo-box semaforo-verde">🟢 Estado: Foto cargada</div>',
                 unsafe_allow_html=True,
             )
 
         if archivo and st.button("🤖 LEER PLANILLA"):
             st.markdown(
-                '<div class="semaforo-box semaforo-amarillo">🟡 Estado: Analizando planilla con IA...</div>',
+                '<div class="semaforo-box semaforo-amarillo">🟡 Analizando con IA...</div>',
                 unsafe_allow_html=True,
             )
             with st.spinner("Procesando imagen..."):
@@ -351,8 +387,8 @@ with st.sidebar:
                     st.success("¡Lectura exitosa!")
                     st.rerun()
     else:
-        st.info("Sube tus fotos de golpe. Se procesarán todas de forma continua.")
-        
+        st.info("Sube tus fotos en lote.")
+
         if "ultimo_conteo_lote" not in st.session_state:
             st.session_state.ultimo_conteo_lote = 0
 
@@ -363,52 +399,45 @@ with st.sidebar:
             key="uploader_lotes",
         )
 
-        if archivos_lote and len(archivos_lote) != st.session_state.ultimo_conteo_lote:
+        if (
+            archivos_lote
+            and len(archivos_lote) != st.session_state.ultimo_conteo_lote
+        ):
             st.session_state.ultimo_conteo_lote = len(archivos_lote)
             st.session_state.lote_procesado_exitoso = False
 
-        # --- CHECKLIST VISUAL DE PROGRESO ---
         st.markdown("### 📋 Estado del Proceso")
-        
+
         if not archivos_lote:
             st.session_state.ultimo_conteo_lote = 0
             st.markdown("⬜ **1. Fotos cargadas:** Pendiente")
             st.markdown("⬜ **2. Procesamiento IA:** En espera")
             st.markdown("⬜ **3. Resultados listos:** Pendiente")
             st.markdown(
-                '<div class="semaforo-box semaforo-rojo" style="margin-top: 10px;">🔴 Esperando lote de fotos</div>',
+                '<div class="semaforo-box semaforo-rojo">🔴 Esperando lote de fotos</div>',
                 unsafe_allow_html=True,
             )
         else:
             total_cargados = len(archivos_lote)
-            
+
             if st.session_state.lote_procesado_exitoso:
                 st.markdown(f"✅ **1. Fotos cargadas:** {total_cargados} listas")
                 st.markdown("✅ **2. Procesamiento IA:** Finalizado")
-                st.markdown("✅ **3. Resultados listos:** Disponibles en reporte")
+                st.markdown("✅ **3. Resultados listos:** Disponibles")
                 st.markdown(
-                    f'<div class="semaforo-box semaforo-verde" style="margin-top: 10px;">🟢 ¡Lote procesado con éxito!</div>',
+                    '<div class="semaforo-box semaforo-verde">🟢 ¡Lote procesado!</div>',
                     unsafe_allow_html=True,
                 )
-                st.success("Las fotos de este lote ya fueron procesadas y agregadas al reporte general.")
             else:
                 st.markdown(f"✅ **1. Fotos cargadas:** {total_cargados} listas")
-                st.markdown("🔄 **2. Procesamiento IA:** Listo para iniciar")
+                st.markdown("🔄 **2. Procesamiento IA:** Listo")
                 st.markdown("⬜ **3. Resultados listos:** Pendiente")
-                st.markdown(
-                    f'<div class="semaforo-box semaforo-verde" style="margin-top: 10px;">🟢 {total_cargados} fotos cargadas, listas para procesar</div>',
-                    unsafe_allow_html=True,
-                )
 
-                if st.button(f"🤖 PROCESAR LAS {total_cargados} FOTOS CARGADAS"):
+                if st.button(
+                    f"🤖 PROCESAR LAS {total_cargados} FOTOS CARGADAS"
+                ):
                     barra_progreso = st.progress(0)
-                    total_archivos = len(archivos_lote)
                     procesados_exito = 0
-
-                    st.markdown(
-                        '<div class="semaforo-box semaforo-amarillo" style="margin-top: 10px;">🟡 Procesando lote completo con IA...</div>',
-                        unsafe_allow_html=True,
-                    )
 
                     for i, archivo_item in enumerate(archivos_lote):
                         try:
@@ -426,57 +455,62 @@ with st.sidebar:
                                 for idx_item in range(20):
                                     k_str = str(idx_item + 1).zfill(2)
                                     try:
-                                        val_L = float(items_lote.get(k_str, 0.0))
-                                    except:
+                                        val_L = float(
+                                            items_lote.get(k_str, 0.0)
+                                        )
+                                    except Exception:
                                         val_L = 0.0
                                     vals_lote[nombres_items[idx_item]] = val_L
 
                                 nuevo_registro = {
                                     "Estado": cabe_lote.get("estado", ""),
-                                    "Fecha": datetime.now().strftime("%Y-%m-%d"),
+                                    "Fecha": datetime.now().strftime(
+                                        "%Y-%m-%d"
+                                    ),
                                     "Contrato": cabe_lote.get("contrato", "0"),
                                     "Maíz": "MBI",
                                     "COD MAIZ SAP": "MBI(12202968)",
                                     "N° Vehículos Analizados": 1,
-                                    "Centros Externos": cabe_lote.get("procedencia", "PROVECESA"),
-                                    "Analista": cabe_lote.get("analista", "Automático"),
+                                    "Centros Externos": procedencia_lote,
+                                    "Destino": destino_lote,
+                                    "Analista": analista_lote,
                                     "Placa": cabe_lote.get("placa", "N/D"),
                                     "Silo": cabe_lote.get("silo", "N/D"),
-                                    "Destino": cabe_lote.get("destino", "N/D"),
-                                    "Documento": cabe_lote.get("documento", "N/D"),
+                                    "Documento": cabe_lote.get(
+                                        "documento", "N/D"
+                                    ),
                                     "Cereal": "Maíz Blanco",
                                     "Origen": "Nacional",
                                     **vals_lote,
                                     "Estatus": "Aprobado",
                                 }
-                                st.session_state.historico.append(nuevo_registro)
+                                st.session_state.historico.append(
+                                    nuevo_registro
+                                )
                                 procesados_exito += 1
 
-                            # Pausa obligatoria de 4 segundos para evitar el error 429
-                            time.sleep(4)
+                            time.sleep(3)
 
                         except Exception as ex:
-                            if "429" in str(ex) or "ResourceExhausted" in str(ex):
-                                st.error("⚠️ Se alcanzó el límite de la API (Error 429). Espera 1 minuto antes de procesar más fotos.")
-                            else:
-                                st.warning(f"Incidencia en archivo {archivo_item.name}: {ex}")
+                            st.warning(f"Incidencia en {archivo_item.name}: {ex}")
 
-                        barra_progreso.progress((i + 1) / total_archivos)
+                        barra_progreso.progress((i + 1) / total_cargados)
 
                     if procesados_exito > 0:
                         st.session_state.lote_procesado_exitoso = True
-                        st.success(f"¡Lote completado! Se procesaron {procesados_exito} de {total_archivos} fotos.")
+                        st.success(
+                            f"¡Lote completado! {procesados_exito} fotos procesadas."
+                        )
                         st.rerun()
 
     st.divider()
-
     st.subheader("🗑️ Gestión de Jornada")
-    if st.button("🧹 Limpiar Registro Actual (Borrar Acumulado)"):
+    if st.button("🧹 Limpiar Registro Actual"):
         st.session_state.historico = []
         st.session_state.datos_ia = {}
         st.session_state.lote_procesado_exitoso = False
         st.session_state.ultimo_conteo_lote = 0
-        st.success("¡Registro acumulado limpiado con éxito!")
+        st.success("¡Registro limpiado!")
         st.rerun()
 
 # --- 3. FORMULARIO PRINCIPAL ---
@@ -490,19 +524,22 @@ with st.form("registro_maestro"):
         unsafe_allow_html=True,
     )
 
+    # Fila 1: 4 columnas para la primera línea de la cabecera
     c1, c2, c3, c4 = st.columns(4)
-    f_estado = c1.text_input("Estado", value=cabe.get("estado", ""))
-    f_fecha = c2.date_input("Fecha", datetime.now())
-    f_contrato = c3.text_input("Contrato", value=cabe.get("contrato", ""))
-    f_procedencia = c4.text_input(
-        "Centros Externos", value=cabe.get("procedencia", "")
-    )
+    f_procedencia = c1.text_input("Procedencia", value="Silos Xeax")
+    f_destino = c2.text_input("Destino", value="APC Chivacoa")
+    f_estado = c3.text_input("Estado", value=cabe.get("estado", ""))
+    f_fecha = c4.date_input("Fecha", datetime.now())
 
+    # Fila 2: 4 columnas para los identificadores del vehículo
     c5, c6, c7, c8 = st.columns(4)
-    f_analista = c5.text_input("Analista", value=cabe.get("analista", ""))
-    f_placa = c6.text_input("Placa", value=cabe.get("placa", ""))
+    f_contrato = c5.text_input("N° de Contrato", value=cabe.get("contrato", ""))
+    f_placa = c6.text_input("Placa de Vehículo", value=cabe.get("placa", ""))
     f_silo = c7.text_input("Silo", value=cabe.get("silo", ""))
     f_doc = c8.text_input("Documento", value=cabe.get("documento", ""))
+
+    # Fila 3: Analista manual en su propia sección
+    f_analista = st.text_input("Analista de Calidad", value="Terry Silva")
 
     st.markdown(
         '<div class="section-header">🔬 Resultados de Laboratorio</div>',
@@ -541,6 +578,7 @@ with st.form("registro_maestro"):
             "COD MAIZ SAP": "MBI(12202968)",
             "N° Vehículos Analizados": 1,
             "Centros Externos": f_procedencia,
+            "Destino": f_destino,
             "Analista": f_analista,
             "Placa": f_placa,
             "Silo": f_silo,
@@ -566,12 +604,12 @@ if st.session_state.historico:
         promedios = df.mean(numeric_only=True)
         ultimo = df.iloc[-1]
         analista = ultimo.get("Analista", "Analista Calidad")
-        silo = ultimo.get("Centros Externos", "PROVECESA")
+        silo = ultimo.get("Centros Externos", "PROVENESA")
         destino = ultimo.get("Destino", "Planta")
 
         reporte = f"*{analista}*\n"
         reporte += "Buenos días.\n"
-        reporte += f"Despacho:\n"
+        reporte += "Despacho:\n"
         reporte += f"Fecha: {datetime.now().strftime('%d/%m/%Y')}\n"
         reporte += f"Silos: {silo}\n"
         reporte += "Material: MBI(12202968)\n"
@@ -596,7 +634,7 @@ if st.session_state.historico:
 
         for col_df, abreviatura, unidad in parametros_formato:
             valor = promedios.get(col_df, 0.0)
-            if unidad == "PPB" or unidad == "PPM":
+            if unidad in ["PPB", "PPM"]:
                 reporte += f"⬛ {abreviatura}: {valor:.1f} {unidad}\n"
             elif unidad == "%":
                 reporte += f"⬛ {abreviatura}: {valor:.2f}%\n"
@@ -629,7 +667,9 @@ if st.session_state.historico:
     with pd.ExcelWriter(buffer_xls, engine="xlsxwriter") as writer:
         df.to_excel(writer, sheet_name="Detalle", index=False)
         if not df.empty:
-            columnas_numericas = [col for col in nombres_items if col in df.columns]
+            columnas_numericas = [
+                col for col in nombres_items if col in df.columns
+            ]
             agrupacion_cols = ["Fecha", "Centros Externos", "Cereal", "Origen"]
             agrupacion_cols = [c for c in agrupacion_cols if c in df.columns]
 
@@ -647,7 +687,9 @@ if st.session_state.historico:
             else:
                 df_resumen = df[columnas_numericas].mean().to_frame().T
                 df_resumen["N° Vehículos Analizados"] = len(df)
-            df_resumen.to_excel(writer, sheet_name="Resumen por Día", index=False)
+            df_resumen.to_excel(
+                writer, sheet_name="Resumen por Día", index=False
+            )
 
     st.download_button(
         "📥 Descargar Reporte Excel Acumulado",
@@ -672,5 +714,3 @@ if st.session_state.historico:
                 file_name=f"Reporte_{datetime.now().strftime('%d%m%Y')}.png",
                 mime="image/png",
             )
-else:
-    st.info("Aún no hay datos acumulados para generar reportes.")
