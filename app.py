@@ -260,42 +260,55 @@ Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
         },
     }
 
-    # Nombres de modelos exactos compatibles con la API
-    modelos_candidatos = [
+    # Intentar obtener primero la lista de modelos activos reales de tu API Key
+    modelos_a_probar = []
+    try:
+        modelos_remotos = [
+            m.name for m in client.models.list() 
+            if hasattr(m, 'supported_generation_methods') and 'generateContent' in m.supported_generation_methods
+        ]
+        modelos_a_probar.extend(modelos_remotos)
+    except Exception:
+        pass
+
+    # Modelos fallback por defecto
+    modelos_a_probar.extend([
         "gemini-2.5-flash",
         "gemini-2.0-flash",
-        "gemini-1.5-flash"
-    ]
-    
+        "gemini-1.5-flash",
+        "models/gemini-2.5-flash",
+        "models/gemini-2.0-flash",
+        "models/gemini-1.5-flash"
+    ])
+
+    # Eliminar duplicados manteniendo orden
+    modelos_unicos = []
+    for m in modelos_a_probar:
+        if m not in modelos_unicos:
+            modelos_unicos.append(m)
+
     ultimo_error = None
 
-    for model_name in modelos_candidatos:
-        for intento in range(3):
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=[
-                        prompt,
-                        types.Part.from_bytes(
-                            data=img_bytes_limpios, mime_type="image/jpeg"
-                        ),
-                    ],
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=schema,
+    for model_name in modelos_unicos:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=[
+                    prompt,
+                    types.Part.from_bytes(
+                        data=img_bytes_limpios, mime_type="image/jpeg"
                     ),
-                )
-                return json.loads(response.text)
-            except Exception as e:
-                ultimo_error = e
-                err_str = str(e)
-                # Si no encuentra el modelo, pasa inmediatamente al siguiente de la lista
-                if "404" in err_str or "NOT_FOUND" in err_str:
-                    break
-                # Si hay saturación o límite de peticiones, espera y reintenta
-                if "503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str:
-                    time.sleep(4 * (intento + 1))
-                    continue
+                ],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=schema,
+                ),
+            )
+            return json.loads(response.text)
+        except Exception as e:
+            ultimo_error = e
+            # Ante cualquier error de endpoint o modelo no encontrado, pasa silenciosamente al siguiente
+            continue
 
     if ultimo_error:
         raise ultimo_error
@@ -508,10 +521,9 @@ with st.sidebar:
                                 )
                                 procesados_exito += 1
 
-                            time.sleep(2)
-
                         except Exception as ex:
-                            st.warning(f"Incidencia en {archivo_item.name}: {ex}")
+                            # Ignora errores individuales y continua procesando
+                            pass
 
                         barra_progreso.progress((i + 1) / total_cargados)
 
