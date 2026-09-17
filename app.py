@@ -224,8 +224,6 @@ def procesar_bytes_planilla_con_ia(img_bytes):
         imagen_pil.save(img_byte_arr, format="JPEG", quality=85)
         img_bytes_limpios = img_byte_arr.getvalue()
 
-        # Prompt ajustado: No extrae Procedencia, Destino ni Analista.
-        # Extrae explícitamente Fumonisina del área de OBSERVACIONES.
         prompt = """Analiza la imagen de la planilla de calidad de Alimentos Polar.
 Extrae la información únicamente de los siguientes campos de cabecera:
 - placa: PLACA DE VEHÍCULO
@@ -264,7 +262,7 @@ Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
         }
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.6-flash",
             contents=[
                 prompt,
                 types.Part.from_bytes(
