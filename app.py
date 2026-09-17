@@ -260,12 +260,12 @@ Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
         },
     }
 
-    # Reintentos automáticos si el servidor devuelve 503 u otro error temporal
+    # Reintentos automáticos si la API devuelve 503 u otro error temporal
     max_intentos = 3
     for intento in range(max_intentos):
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.6-flash",  # Modelo actualizado
                 contents=[
                     prompt,
                     types.Part.from_bytes(
@@ -281,7 +281,7 @@ Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
         except Exception as e:
             if "503" in str(e) or "UNAVAILABLE" in str(e):
                 if intento < max_intentos - 1:
-                    time.sleep(4 * (intento + 1))  # Espera progresiva: 4s, 8s
+                    time.sleep(4 * (intento + 1))
                     continue
             raise e
 
@@ -493,7 +493,7 @@ with st.sidebar:
                                 )
                                 procesados_exito += 1
 
-                            # Pausa breve entre imágenes para evitar saturación de la API
+                            # Pausa breve de 2s entre lecturas para no saturar la API
                             time.sleep(2)
 
                         except Exception as ex:
@@ -543,7 +543,7 @@ with st.form("registro_maestro"):
     f_silo = c7.text_input("Silo", value=cabe.get("silo", ""))
     f_doc = c8.text_input("Documento", value=cabe.get("documento", ""))
 
-    # Fila 3: Analista manual en su propia sección
+    # Fila 3: Analista manual
     f_analista = st.text_input("Analista de Calidad", value="Terry Silva")
 
     st.markdown(
