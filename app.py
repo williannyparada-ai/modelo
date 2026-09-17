@@ -260,30 +260,44 @@ Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
         },
     }
 
-    # Estrategia de Reintentos (Exponential Backoff) para mitigar errores 503
-    max_intentos = 5
-    for intento in range(max_intentos):
-        try:
-            response = client.models.generate_content(
-                model="gemini-1.5-flash",  # Modelo de alta disponibilidad
-                contents=[
-                    prompt,
-                    types.Part.from_bytes(
-                        data=img_bytes_limpios, mime_type="image/jpeg"
+    # Modelos a intentar en orden de preferencia
+    modelos_compatibles = ["gemini-2.5-flash", "gemini-1.5-flash-latest"]
+    
+    max_intentos = 4
+    ultimo_error = None
+
+    for model_name in modelos_compatibles:
+        for intento in range(max_intentos):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=[
+                        prompt,
+                        types.Part.from_bytes(
+                            data=img_bytes_limpios, mime_type="image/jpeg"
+                        ),
+                    ],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=schema,
                     ),
-                ],
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=schema,
-                ),
-            )
-            return json.loads(response.text)
-        except Exception as e:
-            if "503" in str(e) or "UNAVAILABLE" in str(e) or "429" in str(e):
-                if intento < max_intentos - 1:
-                    time.sleep(5 * (intento + 1))  # Esperas de 5s, 10s, 15s, 20s
-                    continue
-            raise e
+                )
+                return json.loads(response.text)
+            except Exception as e:
+                ultimo_error = e
+                err_str = str(e)
+                # Si el modelo no existe (404), pasamos al siguiente modelo de la lista inmediatamente
+                if "404" in err_str or "NOT_FOUND" in err_str:
+                    break
+                # Si hay saturación (503/429), esperamos antes de reintentar
+                if "503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str:
+                    if intento < max_intentos - 1:
+                        time.sleep(3 * (intento + 1))
+                        continue
+                raise e
+
+    if ultimo_error:
+        raise ultimo_error
 
 
 def procesar_planilla_con_ia(archivo):
@@ -493,8 +507,7 @@ with st.sidebar:
                                 )
                                 procesados_exito += 1
 
-                            # Pausa prudencial entre peticiones para evitar saturar el servidor
-                            time.sleep(3)
+                            time.sleep(2)
 
                         except Exception as ex:
                             st.warning(f"Incidencia en {archivo_item.name}: {ex}")
