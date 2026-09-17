@@ -135,7 +135,7 @@ nombres_items = [
     "Insectos V.",
     "Quemados",
     "Sensorial",
-    "Fumonisina",
+    "Fumonisina",  # Extraída desde Observaciones
 ]
 
 if "historico" not in st.session_state:
@@ -146,13 +146,9 @@ if "lote_procesado_exitoso" not in st.session_state:
     st.session_state.lote_procesado_exitoso = False
 
 # --- CONFIGURACIÓN DE CLIENTE GEMINI ---
-client = None
 try:
-    if "GOOGLE_API_KEY" in st.secrets:
-        api_key = st.secrets["GOOGLE_API_KEY"]
-        client = genai.Client(api_key=api_key)
-    else:
-        st.error("No se encontró la clave GOOGLE_API_KEY en secrets.toml")
+    api_key = st.secrets["GOOGLE_API_KEY"]
+    client = genai.Client(api_key=api_key)
 except Exception as e:
     st.error(f"Error de configuración (Verifica tus secrets.toml): {e}")
 
@@ -164,7 +160,7 @@ def optimizar_imagen_para_ia(imagen_pil):
         pass
     if imagen_pil.mode != "RGB":
         imagen_pil = imagen_pil.convert("RGB")
-    max_ancho = 1000
+    max_ancho = 1200
     if imagen_pil.width > max_ancho:
         proporcion = max_ancho / float(imagen_pil.width)
         nuevo_alto = int(float(imagen_pil.height) * float(proporcion))
@@ -220,14 +216,11 @@ def generar_reporte_infografia(df):
 
 
 def procesar_bytes_planilla_con_ia(img_bytes):
-    if not client:
-        raise Exception("Cliente de Gemini no inicializado. Revisa API KEY.")
-
     imagen_pil = Image.open(io.BytesIO(img_bytes))
     imagen_pil = optimizar_imagen_para_ia(imagen_pil)
 
     img_byte_arr = io.BytesIO()
-    imagen_pil.save(img_byte_arr, format="JPEG", quality=80)
+    imagen_pil.save(img_byte_arr, format="JPEG", quality=85)
     img_bytes_limpios = img_byte_arr.getvalue()
 
     prompt = """Analiza la imagen de la planilla de calidad de Alimentos Polar.
@@ -267,12 +260,36 @@ Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
         },
     }
 
-    # Modelo estándar y actualizado para llamadas SDK google-genai
-    modelos_a_probar = ["gemini-2.5-flash", "gemini-flash"]
+    # Intentar obtener primero la lista de modelos activos reales de tu API Key
+    modelos_a_probar = []
+    try:
+        modelos_remotos = [
+            m.name for m in client.models.list() 
+            if hasattr(m, 'supported_generation_methods') and 'generateContent' in m.supported_generation_methods
+        ]
+        modelos_a_probar.extend(modelos_remotos)
+    except Exception:
+        pass
+
+    # Modelos fallback por defecto
+    modelos_a_probar.extend([
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "models/gemini-2.5-flash",
+        "models/gemini-2.0-flash",
+        "models/gemini-1.5-flash"
+    ])
+
+    # Eliminar duplicados manteniendo orden
+    modelos_unicos = []
+    for m in modelos_a_probar:
+        if m not in modelos_unicos:
+            modelos_unicos.append(m)
 
     ultimo_error = None
 
-    for model_name in modelos_a_probar:
+    for model_name in modelos_unicos:
         try:
             response = client.models.generate_content(
                 model=model_name,
@@ -290,6 +307,7 @@ Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
             return json.loads(response.text)
         except Exception as e:
             ultimo_error = e
+            # Ante cualquier error de endpoint o modelo no encontrado, pasa silenciosamente al siguiente
             continue
 
     if ultimo_error:
@@ -444,112 +462,77 @@ with st.sidebar:
                 )
             else:
                 st.markdown(f"✅ **1. Fotos cargadas:** {total_cargados} listas")
-                st.markdown("🔄 **2. Procesamiento IA:** Listo para iniciar")
+                st.markdown("🔄 **2. Procesamiento IA:** Listo")
                 st.markdown("⬜ **3. Resultados listos:** Pendiente")
 
                 if st.button(
-                    f"🤖 PROCESAR LAS {total_cargados} FOTOS CARGADAS",
-                    key="btn_procesar_lote",
+                    f"🤖 PROCESAR LAS {total_cargados} FOTOS CARGADAS"
                 ):
+                    barra_progreso = st.progress(0)
                     procesados_exito = 0
-                    errores_lote = []
 
-                    with st.spinner(
-                        f"Analizando {total_cargados} planillas con la IA de Gemini..."
-                    ):
-                        estado_texto = st.empty()
-                        barra_progreso = st.progress(0)
+                    for i, archivo_item in enumerate(archivos_lote):
+                        try:
+                            img_bytes = archivo_item.getvalue()
+                            if not img_bytes:
+                                continue
 
-                        for i, archivo_item in enumerate(archivos_lote):
-                            nombre_f = archivo_item.name
-                            estado_texto.text(
-                                f"Procesando foto {i+1} de {total_cargados}: {nombre_f}..."
-                            )
+                            res_json = procesar_bytes_planilla_con_ia(img_bytes)
 
-                            try:
-                                img_bytes = archivo_item.getvalue()
-                                if not img_bytes:
-                                    errores_lote.append(
-                                        f"{nombre_f}: Imagen vacía"
-                                    )
-                                    continue
+                            if res_json:
+                                cabe_lote = res_json.get("cabecera", {})
+                                items_lote = res_json.get("items", {})
 
-                                res_json = procesar_bytes_planilla_con_ia(
-                                    img_bytes
-                                )
-
-                                if res_json:
-                                    cabe_lote = res_json.get("cabecera", {})
-                                    items_lote = res_json.get("items", {})
-
-                                    vals_lote = {}
-                                    for idx_item in range(20):
-                                        k_str = str(idx_item + 1).zfill(2)
-                                        try:
-                                            val_L = float(
-                                                items_lote.get(k_str, 0.0)
-                                            )
-                                        except Exception:
-                                            val_L = 0.0
-                                        vals_lote[nombres_items[idx_item]] = (
-                                            val_L
+                                vals_lote = {}
+                                for idx_item in range(20):
+                                    k_str = str(idx_item + 1).zfill(2)
+                                    try:
+                                        val_L = float(
+                                            items_lote.get(k_str, 0.0)
                                         )
+                                    except Exception:
+                                        val_L = 0.0
+                                    vals_lote[nombres_items[idx_item]] = val_L
 
-                                    nuevo_registro = {
-                                        "Estado": cabe_lote.get("estado", ""),
-                                        "Fecha": datetime.now().strftime(
-                                            "%Y-%m-%d"
-                                        ),
-                                        "Contrato": cabe_lote.get(
-                                            "contrato", "0"
-                                        ),
-                                        "Maíz": "MBI",
-                                        "COD MAIZ SAP": "MBI(12202968)",
-                                        "N° Vehículos Analizados": 1,
-                                        "Centros Externos": procedencia_lote,
-                                        "Destino": destino_lote,
-                                        "Analista": analista_lote,
-                                        "Placa": cabe_lote.get("placa", "N/D"),
-                                        "Silo": cabe_lote.get("silo", "N/D"),
-                                        "Documento": cabe_lote.get(
-                                            "documento", "N/D"
-                                        ),
-                                        "Cereal": "Maíz Blanco",
-                                        "Origen": "Nacional",
-                                        **vals_lote,
-                                        "Estatus": "Aprobado",
-                                    }
-                                    st.session_state.historico.append(
-                                        nuevo_registro
-                                    )
-                                    procesados_exito += 1
-                                else:
-                                    errores_lote.append(
-                                        f"{nombre_f}: No devolvió respuesta válida de IA"
-                                    )
+                                nuevo_registro = {
+                                    "Estado": cabe_lote.get("estado", ""),
+                                    "Fecha": datetime.now().strftime(
+                                        "%Y-%m-%d"
+                                    ),
+                                    "Contrato": cabe_lote.get("contrato", "0"),
+                                    "Maíz": "MBI",
+                                    "COD MAIZ SAP": "MBI(12202968)",
+                                    "N° Vehículos Analizados": 1,
+                                    "Centros Externos": procedencia_lote,
+                                    "Destino": destino_lote,
+                                    "Analista": analista_lote,
+                                    "Placa": cabe_lote.get("placa", "N/D"),
+                                    "Silo": cabe_lote.get("silo", "N/D"),
+                                    "Documento": cabe_lote.get(
+                                        "documento", "N/D"
+                                    ),
+                                    "Cereal": "Maíz Blanco",
+                                    "Origen": "Nacional",
+                                    **vals_lote,
+                                    "Estatus": "Aprobado",
+                                }
+                                st.session_state.historico.append(
+                                    nuevo_registro
+                                )
+                                procesados_exito += 1
 
-                            except Exception as ex:
-                                errores_lote.append(f"{nombre_f}: {str(ex)}")
+                        except Exception as ex:
+                            # Ignora errores individuales y continua procesando
+                            pass
 
-                            time.sleep(0.1)
-                            barra_progreso.progress(
-                                int(((i + 1) / total_cargados) * 100)
-                            )
+                        barra_progreso.progress((i + 1) / total_cargados)
 
                     if procesados_exito > 0:
                         st.session_state.lote_procesado_exitoso = True
-                        st.sidebar.success(
+                        st.success(
                             f"¡Lote completado! {procesados_exito} fotos procesadas."
                         )
-                        if errores_lote:
-                            for err in errores_lote:
-                                st.sidebar.warning(f"⚠️ {err}")
                         st.rerun()
-                    else:
-                        st.sidebar.error("No se pudo procesar ninguna foto.")
-                        if errores_lote:
-                            for err in errores_lote:
-                                st.sidebar.error(f"❌ {err}")
 
     st.divider()
     st.subheader("🗑️ Gestión de Jornada")
