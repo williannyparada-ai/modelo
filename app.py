@@ -260,6 +260,7 @@ Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
         },
     }
 
+    # Intentar obtener primero la lista de modelos activos reales de tu API Key
     modelos_a_probar = []
     try:
         modelos_remotos = [
@@ -270,6 +271,7 @@ Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
     except Exception:
         pass
 
+    # Modelos fallback por defecto
     modelos_a_probar.extend([
         "gemini-2.5-flash",
         "gemini-2.0-flash",
@@ -279,6 +281,7 @@ Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
         "models/gemini-1.5-flash"
     ])
 
+    # Eliminar duplicados manteniendo orden
     modelos_unicos = []
     for m in modelos_a_probar:
         if m not in modelos_unicos:
@@ -304,6 +307,7 @@ Si algún campo no es legible, asigna 0.0 para números o "" para textos."""
             return json.loads(response.text)
         except Exception as e:
             ultimo_error = e
+            # Ante cualquier error de endpoint o modelo no encontrado, pasa silenciosamente al siguiente
             continue
 
     if ultimo_error:
@@ -518,6 +522,7 @@ with st.sidebar:
                                 procesados_exito += 1
 
                         except Exception as ex:
+                            # Ignora errores individuales y continua procesando
                             pass
 
                         barra_progreso.progress((i + 1) / total_cargados)
@@ -582,11 +587,11 @@ with st.form("registro_maestro"):
 
         with cols[i % 5]:
             vals_registro[nombres_items[i]] = st.number_input(
-                f"{nombres_items[i]}", value=val_limpio, step=0.01, key=f"item_input_{i}"
+                f"{nombres_items[i]}", value=val_limpio, step=0.01
             )
 
     st.write("")
-    f_estatus = st.radio("Estatus:", ["Aprobado", "Rechazado"], horizontal=True, key="radio_estatus_form")
+    f_estatus = st.radio("Estatus:", ["Aprobado", "Rechazado"], horizontal=True)
 
     submit = st.form_submit_button(
         "✅ REGISTRAR Y ACUMULAR EN REPORTE GENERAL", use_container_width=True
